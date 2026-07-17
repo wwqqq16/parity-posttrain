@@ -21,6 +21,12 @@ dev = [
     "mypy>=1.10"
 ]
 
+ml = [
+    "torch>=2.6,<3",
+    "transformers>=4.51,<6",
+    "safetensors>=0.5,<1",
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

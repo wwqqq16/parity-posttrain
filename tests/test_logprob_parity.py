@@ -115,3 +115,20 @@ def test_build_parity_report_rejects_misalignment() -> None:
             rollout_logprobs=[-0.1, -0.2],
             trainer_logprobs=[-0.1, -0.2],
         )
+
+def test_tolerance_boundary_ignores_float_noise() -> None:
+    report = build_parity_report(
+        model_name="test-model",
+        device="cpu",
+        dtype="float32",
+        token_ids=[10],
+        token_texts=["a"],
+        rollout_logprobs=[-0.3],
+        trainer_logprobs=[-0.301],
+        tolerance=0.001,
+    )
+
+    assert report.token_records[0].absolute_error > 0.001
+    assert report.tokens_over_tolerance == 0
+    assert report.within_tolerance is True
+

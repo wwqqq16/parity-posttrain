@@ -194,6 +194,25 @@ def rescore_generated_tokens(
     )
 
 
+
+def exceeds_tolerance(
+    error: float,
+    tolerance: float,
+) -> bool:
+    """Return whether an error meaningfully exceeds tolerance.
+
+    ``math.isclose`` prevents floating-point representation noise at
+    the exact tolerance boundary from being counted as a violation.
+    """
+
+    return error > tolerance and not math.isclose(
+        error,
+        tolerance,
+        rel_tol=0.0,
+        abs_tol=1e-12,
+    )
+
+
 def build_parity_report(
     *,
     model_name: str,
@@ -278,9 +297,13 @@ def build_parity_report(
         max_absolute_error=max_error,
         p95_absolute_error=sorted_errors[p95_index],
         tokens_over_tolerance=sum(
-            error > tolerance for error in errors
+            exceeds_tolerance(error, tolerance)
+            for error in errors
         ),
-        within_tolerance=max_error <= tolerance,
+        within_tolerance=not exceeds_tolerance(
+            max_error,
+            tolerance,
+        ),
         token_records=records,
     )
     report.validate()

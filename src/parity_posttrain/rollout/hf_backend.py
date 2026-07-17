@@ -207,7 +207,7 @@ class HuggingFaceRolloutBackend:
             max_new_tokens=max_new_tokens,
             do_sample=False,
             return_dict_in_generate=True,
-            output_scores=True,
+            output_logits=True,
             pad_token_id=self.tokenizer.pad_token_id,
         )
 
@@ -216,13 +216,13 @@ class HuggingFaceRolloutBackend:
 
         generated_ids = output.sequences[:, prompt_length:]
 
-        if output.scores is None:
+        if output.logits is None:
             raise RuntimeError(
-                "model.generate did not return generation scores"
+                "model.generate did not return generation logits"
             )
 
         generated_logprobs = gather_generated_logprobs(
-            output.scores,
+            output.logits,
             generated_ids,
         )
 

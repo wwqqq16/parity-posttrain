@@ -176,3 +176,51 @@ def test_parser_rejects_cache_metadata_mismatch() -> None:
         match="disagree about use_cache",
     ):
         parse_controlled_parity_payload(payload)
+
+
+def test_summary_serializes_to_json_safe_dict() -> None:
+    from parity_posttrain.parity.controlled_summary import (
+        controlled_parity_summary_to_dict,
+    )
+
+    cached = make_payload(
+        use_cache=True,
+        latency_ms=2.0,
+        mean_error=0.01,
+        max_error=0.04,
+    )
+    uncached = make_payload(
+        use_cache=False,
+        latency_ms=10.0,
+        mean_error=0.0001,
+        max_error=0.0002,
+    )
+
+    summary = build_controlled_parity_summary(
+        [cached, uncached]
+    )
+    payload = controlled_parity_summary_to_dict(summary)
+
+    assert payload["source"] == {
+        "task_id": "basket_001",
+        "turn_index": 0,
+        "model_name": "test-model",
+        "prompt_token_count": 10,
+        "generated_token_count": 2,
+        "tolerance": 1e-3,
+    }
+
+    rows = payload["rows"]
+    comparisons = payload["comparisons"]
+
+    assert isinstance(rows, list)
+    assert isinstance(comparisons, list)
+    assert len(rows) == 2
+    assert len(comparisons) == 1
+
+    comparison = comparisons[0]
+
+    assert isinstance(comparison, dict)
+    assert comparison["no_cache_latency_factor"] == 5.0
+    assert comparison["max_error_reduction_factor"] == 200.0
+    assert comparison["mean_error_reduction_factor"] == 100.0

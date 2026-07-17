@@ -384,3 +384,89 @@ def build_controlled_parity_summary(
         rows=ordered_rows,
         comparisons=tuple(comparisons),
     )
+
+
+def controlled_parity_summary_to_dict(
+    summary: ControlledParitySummary,
+) -> dict[str, object]:
+    """Convert a controlled parity summary to JSON-safe data."""
+
+    rows = [
+        {
+            "task_id": row.task_id,
+            "turn_index": row.turn_index,
+            "model_name": row.model_name,
+            "device": row.device,
+            "dtype": row.dtype,
+            "use_cache": row.use_cache,
+            "prompt_token_count": row.prompt_token_count,
+            "generated_token_count": (
+                row.generated_token_count
+            ),
+            "token_count": row.token_count,
+            "tolerance": row.tolerance,
+            "latency_ms": row.latency_ms,
+            "mean_absolute_error": (
+                row.mean_absolute_error
+            ),
+            "max_absolute_error": row.max_absolute_error,
+            "p95_absolute_error": row.p95_absolute_error,
+            "tokens_over_tolerance": (
+                row.tokens_over_tolerance
+            ),
+            "within_tolerance": row.within_tolerance,
+        }
+        for row in summary.rows
+    ]
+
+    comparisons = [
+        {
+            "device": comparison.device,
+            "dtype": comparison.dtype,
+            "cached_max_absolute_error": (
+                comparison.cached.max_absolute_error
+            ),
+            "uncached_max_absolute_error": (
+                comparison.uncached.max_absolute_error
+            ),
+            "cached_mean_absolute_error": (
+                comparison.cached.mean_absolute_error
+            ),
+            "uncached_mean_absolute_error": (
+                comparison.uncached.mean_absolute_error
+            ),
+            "cached_latency_ms": (
+                comparison.cached.latency_ms
+            ),
+            "uncached_latency_ms": (
+                comparison.uncached.latency_ms
+            ),
+            "no_cache_latency_factor": (
+                comparison.no_cache_latency_factor
+            ),
+            "max_error_reduction_factor": (
+                comparison.max_error_reduction_factor
+            ),
+            "mean_error_reduction_factor": (
+                comparison.mean_error_reduction_factor
+            ),
+        }
+        for comparison in summary.comparisons
+    ]
+
+    return {
+        "source": {
+            "task_id": summary.rows[0].task_id,
+            "turn_index": summary.rows[0].turn_index,
+            "model_name": summary.rows[0].model_name,
+            "prompt_token_count": (
+                summary.rows[0].prompt_token_count
+            ),
+            "generated_token_count": (
+                summary.rows[0].generated_token_count
+            ),
+            "tolerance": summary.rows[0].tolerance,
+        },
+        "rows": rows,
+        "comparisons": comparisons,
+    }

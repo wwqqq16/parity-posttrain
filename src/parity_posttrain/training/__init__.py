@@ -15,6 +15,10 @@ from parity_posttrain.training.example import (
     build_generated_token_loss_mask,
     build_trajectory_training_example,
 )
+from parity_posttrain.training.logprobs import (
+    gather_masked_causal_logprobs,
+    rescore_training_batch,
+)
 
 __all__ = [
     "IGNORE_INDEX",
@@ -25,5 +29,7 @@ __all__ = [
     "build_trajectory_training_example",
     "collate_training_examples",
     "extract_training_examples",
+    "gather_masked_causal_logprobs",
     "load_training_examples",
+    "rescore_training_batch",
 ]

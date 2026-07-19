@@ -16,6 +16,10 @@ from parity_posttrain.training.closed_loop import (
     build_closed_loop_aggregate,
     closed_loop_summary_to_dict,
 )
+from parity_posttrain.training.closed_loop_artifact import (
+    extract_closed_loop_snapshots,
+    load_closed_loop_snapshots,
+)
 from parity_posttrain.training.comparison import (
     TaskLogprobShift,
     TrainingComparisonRow,
@@ -79,8 +83,10 @@ __all__ = [
     "centered_reward_advantages",
     "clipped_policy_loss",
     "collate_training_examples",
+    "extract_closed_loop_snapshots",
     "extract_training_examples",
     "gather_masked_causal_logprobs",
+    "load_closed_loop_snapshots",
     "load_training_examples",
     "rescore_training_batch",
     "run_clipped_policy_step",

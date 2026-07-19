@@ -8,6 +8,13 @@ from parity_posttrain.training.batch import (
     TrajectoryTrainingBatch,
     collate_training_examples,
 )
+from parity_posttrain.training.comparison import (
+    TaskLogprobShift,
+    TrainingComparisonRow,
+    TrainingComparisonSummary,
+    TrainingComparisonTask,
+    training_comparison_to_dict,
+)
 from parity_posttrain.training.example import (
     IGNORE_INDEX,
     TrajectoryTrainingExample,
@@ -34,6 +41,10 @@ __all__ = [
     "ClippedPolicyLossResult",
     "IGNORE_INDEX",
     "PolicyNormalization",
+    "TaskLogprobShift",
+    "TrainingComparisonRow",
+    "TrainingComparisonSummary",
+    "TrainingComparisonTask",
     "TrainingStepResult",
     "TrajectoryTrainingBatch",
     "TrajectoryTrainingExample",
@@ -48,4 +59,5 @@ __all__ = [
     "load_training_examples",
     "rescore_training_batch",
     "run_clipped_policy_step",
+    "training_comparison_to_dict",
 ]

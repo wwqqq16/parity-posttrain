@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 import torch
 
@@ -51,6 +52,10 @@ def clipped_policy_loss(
     trainer_logprobs: torch.Tensor,
     batch: TrajectoryTrainingBatch,
     clip_epsilon: float = 0.2,
+    normalization: Literal[
+        "token",
+        "sequence",
+    ] = "token",
 ) -> ClippedPolicyLossResult:
     """Compute a generated-token clipped policy objective."""
 
@@ -74,6 +79,14 @@ def clipped_policy_loss(
     if not 0.0 < clip_epsilon < 1.0:
         raise ValueError(
             "clip_epsilon must be between zero and one"
+        )
+
+    if normalization not in {
+        "token",
+        "sequence",
+    }:
+        raise ValueError(
+            "normalization must be 'token' or 'sequence'"
         )
 
     mask = batch.loss_mask
@@ -129,7 +142,46 @@ def clipped_policy_loss(
         unclipped_objective,
         clipped_objective,
     )
-    loss = -surrogate_objective.mean()
+
+    if normalization == "token":
+        loss = -surrogate_objective.mean()
+    else:
+        sequence_token_counts = mask.sum(dim=1)
+
+        if bool(
+            torch.any(
+                sequence_token_counts == 0
+            ).item()
+        ):
+            raise ValueError(
+                "sequence normalization requires at "
+                "least one trainable token per example"
+            )
+
+        sequence_indices = (
+            torch.arange(
+                mask.shape[0],
+                device=mask.device,
+            )
+            .unsqueeze(1)
+            .expand_as(mask)[mask]
+        )
+        sequence_objective_sums = torch.zeros(
+            mask.shape[0],
+            dtype=surrogate_objective.dtype,
+            device=surrogate_objective.device,
+        ).scatter_add(
+            0,
+            sequence_indices,
+            surrogate_objective,
+        )
+        sequence_objectives = (
+            sequence_objective_sums
+            / sequence_token_counts.to(
+                dtype=surrogate_objective.dtype
+            )
+        )
+        loss = -sequence_objectives.mean()
 
     approximate_kl = (
         (ratio - 1.0) - log_ratio

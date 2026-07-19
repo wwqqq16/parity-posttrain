@@ -123,3 +123,60 @@ def test_clipped_policy_loss_rejects_shape() -> None:
             trainer_logprobs=torch.zeros((1, 2)),
             batch=batch,
         )
+
+
+def test_sequence_normalization_weights_examples_equally() -> None:
+    positive = build_trajectory_training_example(
+        task_id="positive",
+        turn_index=0,
+        status="completed",
+        model_name="test-model",
+        reward=1.0,
+        prompt_token_ids=[1],
+        generated_token_ids=[2],
+        rollout_logprobs=[0.0],
+    )
+    negative = build_trajectory_training_example(
+        task_id="negative",
+        turn_index=0,
+        status="protocol_error",
+        model_name="test-model",
+        reward=0.0,
+        prompt_token_ids=[1],
+        generated_token_ids=[3, 4, 5],
+        rollout_logprobs=[0.0, 0.0, 0.0],
+    )
+    batch = collate_training_examples(
+        (positive, negative),
+        pad_token_id=0,
+    )
+    trainer_logprobs = torch.zeros_like(
+        batch.rollout_logprobs
+    )
+
+    token_result = clipped_policy_loss(
+        trainer_logprobs=trainer_logprobs,
+        batch=batch,
+        normalization="token",
+    )
+    sequence_result = clipped_policy_loss(
+        trainer_logprobs=trainer_logprobs,
+        batch=batch,
+        normalization="sequence",
+    )
+
+    assert token_result.trainable_token_count == 4
+    assert sequence_result.trainable_token_count == 4
+
+    # Token normalization gives the three-token negative
+    # trajectory three times the weight of the positive one.
+    assert token_result.loss.item() == pytest.approx(
+        0.25
+    )
+
+    # Sequence normalization averages inside each trajectory
+    # first, so the +0.5 and -0.5 objectives cancel.
+    assert sequence_result.loss.item() == pytest.approx(
+        0.0,
+        abs=1e-7,
+    )

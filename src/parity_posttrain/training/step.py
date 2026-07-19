@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import Literal
 
 import torch
 
@@ -28,6 +29,7 @@ class TrainingStepResult:
     clip_fraction: float
     trainable_token_count: int
     gradient_norm: float
+    normalization: Literal["token", "sequence"]
 
 
 def run_clipped_policy_step(
@@ -37,6 +39,10 @@ def run_clipped_policy_step(
     batch: TrajectoryTrainingBatch,
     clip_epsilon: float = 0.2,
     max_gradient_norm: float = 1.0,
+    normalization: Literal[
+        "token",
+        "sequence",
+    ] = "token",
 ) -> TrainingStepResult:
     """Run one differentiable clipped policy update."""
 
@@ -72,6 +78,7 @@ def run_clipped_policy_step(
         trainer_logprobs=trainer_logprobs,
         batch=batch,
         clip_epsilon=clip_epsilon,
+        normalization=normalization,
     )
 
     if not bool(
@@ -100,4 +107,5 @@ def run_clipped_policy_step(
         gradient_norm=float(
             gradient_norm.detach().item()
         ),
+        normalization=normalization,
     )

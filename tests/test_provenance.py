@@ -160,7 +160,8 @@ def test_build_experiment_provenance(
     result = build_experiment_provenance(
         source_artifact=artifact,
         model_name="test-model",
-        model_revision=None,
+        requested_model_revision=None,
+        resolved_model_revision="c" * 40,
         seed=0,
         repository_path=tmp_path,
     )
@@ -171,12 +172,22 @@ def test_build_experiment_provenance(
         sha256_file(artifact)
     )
     assert result.model_name == "test-model"
+    assert result.requested_model_revision is None
     assert result.model_revision is None
+    assert result.resolved_model_revision == (
+        "c" * 40
+    )
     assert result.seed == 0
     assert result.python_version
     assert result.platform
 
     assert payload["model_name"] == "test-model"
+    assert payload[
+        "requested_model_revision"
+    ] is None
+    assert payload[
+        "resolved_model_revision"
+    ] == "c" * 40
     assert payload["seed"] == 0
     assert payload["source_artifact_sha256"] == (
         result.source_artifact_sha256
@@ -192,12 +203,35 @@ def test_provenance_rejects_invalid_digest() -> None:
         pytorch_version="2.0.0",
         transformers_version="5.0.0",
         model_name="test-model",
-        model_revision=None,
+        requested_model_revision=None,
+        resolved_model_revision=None,
         seed=0,
     )
 
     with pytest.raises(
         ValueError,
         match="64-character hexadecimal digest",
+    ):
+        result.validate()
+
+
+def test_provenance_rejects_invalid_resolved_revision(
+) -> None:
+    result = ExperimentProvenance(
+        git_commit=None,
+        source_artifact_sha256="a" * 64,
+        python_version="3.12.0",
+        platform="test-platform",
+        pytorch_version="2.0.0",
+        transformers_version="5.0.0",
+        model_name="test-model",
+        requested_model_revision="main",
+        resolved_model_revision="not-a-commit",
+        seed=0,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="hexadecimal commit ID",
     ):
         result.validate()

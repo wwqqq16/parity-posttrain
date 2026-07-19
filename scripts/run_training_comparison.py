@@ -187,7 +187,12 @@ def main(
     provenance = build_experiment_provenance(
         source_artifact=args.artifact,
         model_name=backend.model_name,
-        model_revision=backend.model_revision,
+        requested_model_revision=(
+            backend.model_revision
+        ),
+        resolved_model_revision=(
+            backend.resolved_model_revision
+        ),
         seed=args.seed,
     )
 
@@ -230,7 +235,7 @@ def main(
     payload = training_comparison_to_dict(
         summary
     )
-    payload["schema_version"] = 3
+    payload["schema_version"] = 4
     payload["provenance"] = provenance.to_dict()
 
     args.output.parent.mkdir(

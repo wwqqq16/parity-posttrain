@@ -30,8 +30,15 @@ class ExperimentProvenance:
     pytorch_version: str | None
     transformers_version: str | None
     model_name: str
-    model_revision: str | None
+    requested_model_revision: str | None
+    resolved_model_revision: str | None
     seed: int
+
+    @property
+    def model_revision(self) -> str | None:
+        """Return the requested revision for compatibility."""
+
+        return self.requested_model_revision
 
     def validate(self) -> None:
         """Validate provenance fields."""
@@ -88,11 +95,23 @@ class ExperimentProvenance:
             )
 
         if (
-            self.model_revision is not None
-            and not self.model_revision
+            self.requested_model_revision is not None
+            and not self.requested_model_revision
         ):
             raise ValueError(
-                "model_revision must not be empty"
+                "requested_model_revision must not be empty"
+            )
+
+        if (
+            self.resolved_model_revision is not None
+            and _GIT_COMMIT_PATTERN.fullmatch(
+                self.resolved_model_revision
+            )
+            is None
+        ):
+            raise ValueError(
+                "resolved_model_revision must be a "
+                "hexadecimal commit ID"
             )
 
         if (
@@ -121,7 +140,12 @@ class ExperimentProvenance:
                 self.transformers_version
             ),
             "model_name": self.model_name,
-            "model_revision": self.model_revision,
+            "requested_model_revision": (
+                self.requested_model_revision
+            ),
+            "resolved_model_revision": (
+                self.resolved_model_revision
+            ),
             "seed": self.seed,
         }
 
@@ -230,7 +254,8 @@ def build_experiment_provenance(
     source_artifact: Path,
     model_name: str,
     seed: int,
-    model_revision: str | None = None,
+    requested_model_revision: str | None = None,
+    resolved_model_revision: str | None = None,
     repository_path: Path | None = None,
 ) -> ExperimentProvenance:
     """Build validated experiment provenance."""
@@ -255,7 +280,12 @@ def build_experiment_provenance(
             )
         ),
         model_name=model_name,
-        model_revision=model_revision,
+        requested_model_revision=(
+            requested_model_revision
+        ),
+        resolved_model_revision=(
+            resolved_model_revision
+        ),
         seed=seed,
     )
     provenance.validate()

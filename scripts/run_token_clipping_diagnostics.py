@@ -210,7 +210,12 @@ def main(
     provenance = build_experiment_provenance(
         source_artifact=args.artifact,
         model_name=backend.model_name,
-        model_revision=backend.model_revision,
+        requested_model_revision=(
+            backend.model_revision
+        ),
+        resolved_model_revision=(
+            backend.resolved_model_revision
+        ),
         seed=args.seed,
     )
     pad_token_id = (
@@ -304,7 +309,7 @@ def main(
         parameter_selection.restore_requires_grad()
 
     payload = {
-        "schema_version": 2,
+        "schema_version": 3,
         "source_artifact": str(args.artifact),
         "provenance": provenance.to_dict(),
         "model_name": model_name,

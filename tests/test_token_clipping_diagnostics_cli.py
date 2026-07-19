@@ -76,6 +76,7 @@ def test_main_writes_token_diagnostics(
             calls["revision"] = revision
             self.model_name = model_name
             self.model_revision = revision
+            self.resolved_model_revision = "c" * 40
             self.device = device
             self.dtype = torch.float32
             self.model = torch.nn.Linear(
@@ -151,7 +152,8 @@ def test_main_writes_token_diagnostics(
                 "git_commit": "a" * 40,
                 "source_artifact_sha256": "b" * 64,
                 "model_name": "tiny-model",
-                "model_revision": "test-revision",
+                "requested_model_revision": "test-revision",
+                "resolved_model_revision": "c" * 40,
                 "seed": 17,
             }
 
@@ -225,11 +227,14 @@ def test_main_writes_token_diagnostics(
         output.read_text(encoding="utf-8")
     )
 
-    assert payload["schema_version"] == 2
+    assert payload["schema_version"] == 3
     assert payload["provenance"]["seed"] == 17
     assert payload["provenance"][
-        "model_revision"
+        "requested_model_revision"
     ] == "test-revision"
+    assert payload["provenance"][
+        "resolved_model_revision"
+    ] == "c" * 40
     assert payload["model_name"] == "tiny-model"
     assert payload["task_ids"] == [
         "catalog_004",
@@ -257,6 +262,9 @@ def test_main_writes_token_diagnostics(
     assert provenance_kwargs["source_artifact"] == artifact
     assert provenance_kwargs["model_name"] == "tiny-model"
     assert provenance_kwargs[
-        "model_revision"
+        "requested_model_revision"
     ] == "test-revision"
+    assert provenance_kwargs[
+        "resolved_model_revision"
+    ] == "c" * 40
     assert provenance_kwargs["seed"] == 17

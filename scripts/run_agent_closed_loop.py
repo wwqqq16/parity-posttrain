@@ -242,7 +242,12 @@ def main(
     provenance = build_experiment_provenance(
         source_artifact=args.artifact,
         model_name=backend.model_name,
-        model_revision=backend.model_revision,
+        requested_model_revision=(
+            backend.model_revision
+        ),
+        resolved_model_revision=(
+            backend.resolved_model_revision
+        ),
         seed=args.seed,
     )
     normalization = cast(
@@ -271,7 +276,7 @@ def main(
     payload = closed_loop_summary_to_dict(
         summary
     )
-    payload["schema_version"] = 4
+    payload["schema_version"] = 5
     payload["provenance"] = provenance.to_dict()
     payload["experiment"] = {
         "device": str(backend.device),

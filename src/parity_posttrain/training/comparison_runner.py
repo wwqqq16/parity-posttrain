@@ -31,6 +31,9 @@ from parity_posttrain.training.loop import (
 from parity_posttrain.training.objective import (
     PolicyNormalization,
 )
+from parity_posttrain.training.parameters import (
+    prepare_trainable_parameters,
+)
 
 
 def select_training_examples(
@@ -188,53 +191,6 @@ def _build_task_metadata(
     return tuple(tasks)
 
 
-def _resolve_trainable_parameters(
-    model: torch.nn.Module,
-    parameter_names: Sequence[str],
-) -> tuple[
-    tuple[str, ...],
-    tuple[torch.nn.Parameter, ...],
-]:
-    """Resolve an exact set of trainable model parameters."""
-
-    requested = tuple(parameter_names)
-
-    if not requested:
-        raise ValueError(
-            "trainable_parameter_names must not be empty"
-        )
-
-    if any(not name.strip() for name in requested):
-        raise ValueError(
-            "trainable parameter names must not be empty"
-        )
-
-    if len(set(requested)) != len(requested):
-        raise ValueError(
-            "trainable parameter names must be unique"
-        )
-
-    available = dict(model.named_parameters())
-    missing = [
-        name
-        for name in requested
-        if name not in available
-    ]
-
-    if missing:
-        raise ValueError(
-            "unknown trainable parameters: "
-            + ", ".join(missing)
-        )
-
-    parameters = tuple(
-        available[name]
-        for name in requested
-    )
-
-    return requested, parameters
-
-
 def _restore_parameter_values(
     parameters: Sequence[torch.nn.Parameter],
     snapshots: Sequence[torch.Tensor],
@@ -380,33 +336,29 @@ def run_training_comparison(
             "normalizations must be unique"
         )
 
-    (
-        resolved_names,
-        trainable_parameters,
-    ) = _resolve_trainable_parameters(
-        model,
-        trainable_parameter_names,
+    parameter_selection = (
+        prepare_trainable_parameters(
+            model,
+            trainable_parameter_names,
+        )
+    )
+    resolved_names = parameter_selection.names
+    trainable_parameters = (
+        parameter_selection.parameters
     )
 
-    all_parameters = tuple(model.parameters())
-    original_requires_grad = tuple(
-        parameter.requires_grad
-        for parameter in all_parameters
-    )
     original_training_mode = model.training
-    parameter_snapshots = tuple(
-        parameter.detach().clone()
-        for parameter in trainable_parameters
-    )
-    tasks = _build_task_metadata(batch)
+    parameter_snapshots: tuple[
+        torch.Tensor,
+        ...,
+    ] | None = None
 
     try:
-        for parameter in all_parameters:
-            parameter.requires_grad_(False)
-
-        for parameter in trainable_parameters:
-            parameter.requires_grad_(True)
-
+        parameter_snapshots = tuple(
+            parameter.detach().clone()
+            for parameter in trainable_parameters
+        )
+        tasks = _build_task_metadata(batch)
         model.eval()
 
         with torch.no_grad():
@@ -556,16 +508,12 @@ def run_training_comparison(
         return summary
     finally:
         model.zero_grad(set_to_none=True)
-        _restore_parameter_values(
-            trainable_parameters,
-            parameter_snapshots,
-        )
 
-        for parameter, requires_grad in zip(
-            all_parameters,
-            original_requires_grad,
-            strict=True,
-        ):
-            parameter.requires_grad_(requires_grad)
+        if parameter_snapshots is not None:
+            _restore_parameter_values(
+                trainable_parameters,
+                parameter_snapshots,
+            )
 
+        parameter_selection.restore_requires_grad()
         model.train(original_training_mode)

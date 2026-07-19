@@ -59,6 +59,10 @@ from parity_posttrain.training.objective import (
     centered_reward_advantages,
     clipped_policy_loss,
 )
+from parity_posttrain.training.parameters import (
+    TrainableParameterSelection,
+    prepare_trainable_parameters,
+)
 from parity_posttrain.training.step import (
     TrainingStepResult,
     run_clipped_policy_step,
@@ -77,6 +81,7 @@ __all__ = [
     "TrainingComparisonStep",
     "TrainingComparisonSummary",
     "TrainingComparisonTask",
+    "TrainableParameterSelection",
     "TrainingLoopResult",
     "TrainingStepResult",
     "TrajectoryTrainingBatch",
@@ -94,6 +99,7 @@ __all__ = [
     "gather_masked_causal_logprobs",
     "load_closed_loop_snapshots",
     "load_training_examples",
+    "prepare_trainable_parameters",
     "rerollout_agent_tasks",
     "rescore_training_batch",
     "run_clipped_policy_step",

@@ -1,5 +1,8 @@
 """Training-side data structures and utilities."""
 
+from parity_posttrain.training.agent_closed_loop import (
+    run_agent_closed_loop_experiment,
+)
 from parity_posttrain.training.artifact import (
     extract_training_examples,
     load_training_examples,
@@ -102,6 +105,7 @@ __all__ = [
     "prepare_trainable_parameters",
     "rerollout_agent_tasks",
     "rescore_training_batch",
+    "run_agent_closed_loop_experiment",
     "run_clipped_policy_step",
     "run_closed_loop_experiment",
     "run_clipped_policy_training",

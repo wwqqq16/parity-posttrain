@@ -8,6 +8,14 @@ from parity_posttrain.training.batch import (
     TrajectoryTrainingBatch,
     collate_training_examples,
 )
+from parity_posttrain.training.closed_loop import (
+    ClosedLoopAggregate,
+    ClosedLoopSummary,
+    ClosedLoopTaskComparison,
+    ClosedLoopTaskSnapshot,
+    build_closed_loop_aggregate,
+    closed_loop_summary_to_dict,
+)
 from parity_posttrain.training.comparison import (
     TaskLogprobShift,
     TrainingComparisonRow,
@@ -48,6 +56,10 @@ from parity_posttrain.training.step import (
 
 __all__ = [
     "ClippedPolicyLossResult",
+    "ClosedLoopAggregate",
+    "ClosedLoopSummary",
+    "ClosedLoopTaskComparison",
+    "ClosedLoopTaskSnapshot",
     "IGNORE_INDEX",
     "PolicyNormalization",
     "TaskLogprobShift",
@@ -61,7 +73,9 @@ __all__ = [
     "TrajectoryTrainingExample",
     "build_generated_token_labels",
     "build_generated_token_loss_mask",
+    "build_closed_loop_aggregate",
     "build_trajectory_training_example",
+    "closed_loop_summary_to_dict",
     "centered_reward_advantages",
     "clipped_policy_loss",
     "collate_training_examples",

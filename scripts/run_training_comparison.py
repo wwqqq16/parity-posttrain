@@ -9,6 +9,10 @@ from pathlib import Path
 
 import torch
 
+from parity_posttrain.provenance import (
+    build_experiment_provenance,
+    set_experiment_seed,
+)
 from parity_posttrain.rollout.hf_backend import (
     HuggingFaceRolloutBackend,
 )
@@ -110,6 +114,15 @@ def parse_args(
         default=1.0,
     )
     parser.add_argument(
+        "--seed",
+        type=int,
+        default=0,
+    )
+    parser.add_argument(
+        "--model-revision",
+        default=None,
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=Path(
@@ -142,10 +155,13 @@ def resolve_device(name: str) -> torch.device:
     return torch.device(name)
 
 
-def main() -> None:
+def main(
+    argv: Sequence[str] | None = None,
+) -> None:
     """Run the comparison and write its JSON artifact."""
 
-    args = parse_args()
+    args = parse_args(argv)
+    set_experiment_seed(args.seed)
 
     examples = load_training_examples(
         args.artifact
@@ -166,6 +182,13 @@ def main() -> None:
     backend = HuggingFaceRolloutBackend(
         model_name=model_name,
         device=device,
+        revision=args.model_revision,
+    )
+    provenance = build_experiment_provenance(
+        source_artifact=args.artifact,
+        model_name=backend.model_name,
+        model_revision=backend.model_revision,
+        seed=args.seed,
     )
 
     pad_token_id = backend.tokenizer.pad_token_id
@@ -207,6 +230,8 @@ def main() -> None:
     payload = training_comparison_to_dict(
         summary
     )
+    payload["schema_version"] = 3
+    payload["provenance"] = provenance.to_dict()
 
     args.output.parent.mkdir(
         parents=True,
@@ -235,7 +260,7 @@ def main() -> None:
     )
     print(
         "Optimizer steps:",
-        len(summary.rows[0].resolved_steps),
+        summary.optimizer_steps,
     )
 
     print()

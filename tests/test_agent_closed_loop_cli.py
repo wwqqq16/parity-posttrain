@@ -28,6 +28,8 @@ def test_parse_args_defaults() -> None:
     assert args.learning_rate == pytest.approx(
         0.05
     )
+    assert args.seed == 0
+    assert args.model_revision is None
 
 
 def test_select_tasks_preserves_requested_order() -> None:
@@ -75,9 +77,13 @@ def test_main_writes_closed_loop_artifact(
             *,
             model_name: str,
             device: torch.device,
+            revision: str | None = None,
         ) -> None:
             calls["model_name"] = model_name
             calls["device"] = device
+            calls["revision"] = revision
+            self.model_name = model_name
+            self.model_revision = revision
             self.device = device
             self.dtype = torch.float32
 
@@ -109,6 +115,38 @@ def test_main_writes_closed_loop_artifact(
         "HuggingFaceRolloutBackend",
         FakeBackend,
     )
+    monkeypatch.setattr(
+        cli,
+        "set_experiment_seed",
+        lambda seed: calls.__setitem__(
+            "seed",
+            seed,
+        ),
+    )
+
+    class FakeProvenance:
+        """Minimal provenance object for CLI tests."""
+
+        def to_dict(self) -> dict[str, object]:
+            return {
+                "git_commit": "a" * 40,
+                "source_artifact_sha256": "b" * 64,
+                "model_name": "tiny-model",
+                "model_revision": "revision-123",
+                "seed": 17,
+            }
+
+    def fake_build_provenance(
+        **kwargs: object,
+    ) -> FakeProvenance:
+        calls["provenance_kwargs"] = kwargs
+        return FakeProvenance()
+
+    monkeypatch.setattr(
+        cli,
+        "build_experiment_provenance",
+        fake_build_provenance,
+    )
 
     def fake_run(**kwargs: object) -> object:
         calls["run_kwargs"] = kwargs
@@ -137,6 +175,10 @@ def test_main_writes_closed_loop_artifact(
             "shopping_004",
             "--steps",
             "2",
+            "--seed",
+            "17",
+            "--model-revision",
+            "revision-123",
             "--output",
             str(output),
         ]
@@ -146,7 +188,11 @@ def test_main_writes_closed_loop_artifact(
         output.read_text(encoding="utf-8")
     )
 
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 4
+    assert payload["provenance"]["seed"] == 17
+    assert payload["provenance"][
+        "model_revision"
+    ] == "revision-123"
     assert payload["model_name"] == "tiny-model"
     assert payload["experiment"]["task_ids"] == [
         "catalog_004",
@@ -165,3 +211,16 @@ def test_main_writes_closed_loop_artifact(
         "catalog_004",
         "shopping_004",
     ]
+
+    assert calls["seed"] == 17
+    assert calls["revision"] == "revision-123"
+
+    provenance_kwargs = calls["provenance_kwargs"]
+
+    assert isinstance(provenance_kwargs, dict)
+    assert provenance_kwargs["source_artifact"] == artifact
+    assert provenance_kwargs["model_name"] == "tiny-model"
+    assert provenance_kwargs[
+        "model_revision"
+    ] == "revision-123"
+    assert provenance_kwargs["seed"] == 17

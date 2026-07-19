@@ -14,6 +14,10 @@ from parity_posttrain.core.task import AgentTask
 from parity_posttrain.data.task_factory import (
     build_sample_tasks,
 )
+from parity_posttrain.provenance import (
+    build_experiment_provenance,
+    set_experiment_seed,
+)
 from parity_posttrain.rollout.hf_backend import (
     HuggingFaceRolloutBackend,
 )
@@ -106,6 +110,15 @@ def parse_args(
         "--max-new-tokens",
         type=int,
         default=128,
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=0,
+    )
+    parser.add_argument(
+        "--model-revision",
+        default=None,
     )
     parser.add_argument(
         "--output",
@@ -212,6 +225,7 @@ def main(
     """Run the experiment and write its JSON artifact."""
 
     args = parse_args(argv)
+    set_experiment_seed(args.seed)
     task_ids = tuple(args.task_ids)
     tasks = select_tasks(task_ids)
     model_name = resolve_model_name(
@@ -223,6 +237,13 @@ def main(
     backend = HuggingFaceRolloutBackend(
         model_name=model_name,
         device=device,
+        revision=args.model_revision,
+    )
+    provenance = build_experiment_provenance(
+        source_artifact=args.artifact,
+        model_name=backend.model_name,
+        model_revision=backend.model_revision,
+        seed=args.seed,
     )
     normalization = cast(
         PolicyNormalization,
@@ -250,6 +271,8 @@ def main(
     payload = closed_loop_summary_to_dict(
         summary
     )
+    payload["schema_version"] = 4
+    payload["provenance"] = provenance.to_dict()
     payload["experiment"] = {
         "device": str(backend.device),
         "dtype": str(backend.dtype),

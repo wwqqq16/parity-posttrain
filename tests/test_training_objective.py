@@ -180,3 +180,92 @@ def test_sequence_normalization_weights_examples_equally() -> None:
         0.0,
         abs=1e-7,
     )
+
+
+def make_trajectory_group_batch(
+    positive_turn_count: int,
+):
+    examples = [
+        build_trajectory_training_example(
+            task_id="positive_task",
+            turn_index=turn_index,
+            status="completed",
+            model_name="test-model",
+            reward=1.0,
+            prompt_token_ids=[1],
+            generated_token_ids=[2],
+            rollout_logprobs=[0.0],
+        )
+        for turn_index in range(positive_turn_count)
+    ]
+    examples.append(
+        build_trajectory_training_example(
+            task_id="negative_task",
+            turn_index=0,
+            status="protocol_error",
+            model_name="test-model",
+            reward=0.0,
+            prompt_token_ids=[1],
+            generated_token_ids=[3],
+            rollout_logprobs=[0.0],
+        )
+    )
+
+    return collate_training_examples(
+        tuple(examples),
+        pad_token_id=0,
+    )
+
+
+def controlled_group_logprobs(
+    batch,
+) -> torch.Tensor:
+    trainer_logprobs = torch.zeros_like(
+        batch.rollout_logprobs
+    )
+
+    for row, task_id in enumerate(batch.task_ids):
+        if task_id == "positive_task":
+            trainer_logprobs[
+                row,
+                batch.loss_mask[row],
+            ] = math.log(1.1)
+
+    return trainer_logprobs
+
+
+def test_trajectory_normalization_ignores_turn_count() -> None:
+    one_turn_batch = make_trajectory_group_batch(1)
+    two_turn_batch = make_trajectory_group_batch(2)
+
+    one_turn_result = clipped_policy_loss(
+        trainer_logprobs=controlled_group_logprobs(
+            one_turn_batch
+        ),
+        batch=one_turn_batch,
+        normalization="trajectory",
+    )
+    two_turn_result = clipped_policy_loss(
+        trainer_logprobs=controlled_group_logprobs(
+            two_turn_batch
+        ),
+        batch=two_turn_batch,
+        normalization="trajectory",
+    )
+    sequence_result = clipped_policy_loss(
+        trainer_logprobs=controlled_group_logprobs(
+            two_turn_batch
+        ),
+        batch=two_turn_batch,
+        normalization="sequence",
+    )
+
+    assert one_turn_result.loss.item() == pytest.approx(
+        -0.025
+    )
+    assert two_turn_result.loss.item() == pytest.approx(
+        -0.025
+    )
+    assert sequence_result.loss.item() == pytest.approx(
+        -0.02222222
+    )

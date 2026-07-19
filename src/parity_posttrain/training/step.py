@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Literal
 
 import torch
 
@@ -15,6 +14,7 @@ from parity_posttrain.training.logprobs import (
     rescore_training_batch,
 )
 from parity_posttrain.training.objective import (
+    PolicyNormalization,
     clipped_policy_loss,
 )
 
@@ -29,7 +29,7 @@ class TrainingStepResult:
     clip_fraction: float
     trainable_token_count: int
     gradient_norm: float
-    normalization: Literal["token", "sequence"]
+    normalization: PolicyNormalization
 
 
 def run_clipped_policy_step(
@@ -39,10 +39,7 @@ def run_clipped_policy_step(
     batch: TrajectoryTrainingBatch,
     clip_epsilon: float = 0.2,
     max_gradient_norm: float = 1.0,
-    normalization: Literal[
-        "token",
-        "sequence",
-    ] = "token",
+    normalization: PolicyNormalization = "token",
 ) -> TrainingStepResult:
     """Run one differentiable clipped policy update."""
 

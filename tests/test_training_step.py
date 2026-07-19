@@ -188,3 +188,27 @@ def test_training_step_supports_sequence_normalization() -> None:
     assert result.normalization == "sequence"
     assert result.trainable_token_count == 2
     assert result.gradient_norm > 0.0
+
+
+def test_training_step_supports_trajectory_normalization() -> None:
+    batch = make_batch()
+    model = TrainableLogitModel(
+        batch_size=2,
+        sequence_length=2,
+        vocabulary_size=4,
+    )
+    optimizer = torch.optim.SGD(
+        model.parameters(),
+        lr=0.1,
+    )
+
+    result = run_clipped_policy_step(
+        model=model,
+        optimizer=optimizer,
+        batch=batch,
+        normalization="trajectory",
+    )
+
+    assert result.normalization == "trajectory"
+    assert result.trainable_token_count == 2
+    assert result.gradient_norm > 0.0

@@ -21,6 +21,7 @@ from parity_posttrain.training.logprobs import (
 )
 from parity_posttrain.training.objective import (
     ClippedPolicyLossResult,
+    PolicyNormalization,
     centered_reward_advantages,
     clipped_policy_loss,
 )
@@ -32,6 +33,7 @@ from parity_posttrain.training.step import (
 __all__ = [
     "ClippedPolicyLossResult",
     "IGNORE_INDEX",
+    "PolicyNormalization",
     "TrainingStepResult",
     "TrajectoryTrainingBatch",
     "TrajectoryTrainingExample",

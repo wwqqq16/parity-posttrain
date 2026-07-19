@@ -11,6 +11,12 @@ from parity_posttrain.training.batch import (
     TrajectoryTrainingBatch,
 )
 
+PolicyNormalization = Literal[
+    "token",
+    "sequence",
+    "trajectory",
+]
+
 
 @dataclass(frozen=True)
 class ClippedPolicyLossResult:
@@ -47,15 +53,111 @@ def centered_reward_advantages(
     return float_rewards - float_rewards.mean()
 
 
+def _trajectory_row_advantages(
+    batch: TrajectoryTrainingBatch,
+) -> tuple[torch.Tensor, torch.Tensor, int]:
+    """Build advantages and group IDs by task trajectory."""
+
+    group_by_task: dict[str, int] = {}
+    row_group_ids: list[int] = []
+    first_rows: list[int] = []
+
+    for row, task_id in enumerate(batch.task_ids):
+        group_id = group_by_task.get(task_id)
+
+        if group_id is None:
+            group_id = len(group_by_task)
+            group_by_task[task_id] = group_id
+            first_rows.append(row)
+
+        row_group_ids.append(group_id)
+
+    row_group_indices = torch.tensor(
+        row_group_ids,
+        dtype=torch.long,
+        device=batch.rewards.device,
+    )
+    first_row_indices = torch.tensor(
+        first_rows,
+        dtype=torch.long,
+        device=batch.rewards.device,
+    )
+    group_rewards = batch.rewards[first_row_indices]
+    expected_row_rewards = group_rewards[
+        row_group_indices
+    ]
+
+    if not bool(
+        torch.equal(
+            batch.rewards,
+            expected_row_rewards,
+        )
+    ):
+        raise ValueError(
+            "all examples in one trajectory must "
+            "share the same reward"
+        )
+
+    group_advantages = centered_reward_advantages(
+        group_rewards
+    )
+    row_advantages = group_advantages[
+        row_group_indices
+    ]
+
+    return (
+        row_advantages,
+        row_group_indices,
+        len(first_rows),
+    )
+
+
+def _mean_grouped_objective(
+    *,
+    values: torch.Tensor,
+    group_indices: torch.Tensor,
+    group_count: int,
+) -> torch.Tensor:
+    """Average values inside groups, then across groups."""
+
+    group_sums = torch.zeros(
+        group_count,
+        dtype=values.dtype,
+        device=values.device,
+    ).scatter_add(
+        0,
+        group_indices,
+        values,
+    )
+    group_token_counts = torch.zeros(
+        group_count,
+        dtype=values.dtype,
+        device=values.device,
+    ).scatter_add(
+        0,
+        group_indices,
+        torch.ones_like(values),
+    )
+
+    if bool(
+        torch.any(group_token_counts == 0).item()
+    ):
+        raise ValueError(
+            "every normalization group must contain "
+            "at least one trainable token"
+        )
+
+    return (
+        group_sums / group_token_counts
+    ).mean()
+
+
 def clipped_policy_loss(
     *,
     trainer_logprobs: torch.Tensor,
     batch: TrajectoryTrainingBatch,
     clip_epsilon: float = 0.2,
-    normalization: Literal[
-        "token",
-        "sequence",
-    ] = "token",
+    normalization: PolicyNormalization = "token",
 ) -> ClippedPolicyLossResult:
     """Compute a generated-token clipped policy objective."""
 
@@ -84,9 +186,11 @@ def clipped_policy_loss(
     if normalization not in {
         "token",
         "sequence",
+        "trajectory",
     }:
         raise ValueError(
-            "normalization must be 'token' or 'sequence'"
+            "normalization must be 'token', "
+            "'sequence', or 'trajectory'"
         )
 
     mask = batch.loss_mask
@@ -118,10 +222,24 @@ def clipped_policy_loss(
             "trainable positions"
         )
 
-    sequence_advantages = centered_reward_advantages(
-        batch.rewards
-    )
-    token_advantages = sequence_advantages.unsqueeze(
+    if normalization == "trajectory":
+        (
+            row_advantages,
+            row_group_indices,
+            group_count,
+        ) = _trajectory_row_advantages(batch)
+    else:
+        row_advantages = centered_reward_advantages(
+            batch.rewards
+        )
+        row_group_indices = torch.arange(
+            mask.shape[0],
+            dtype=torch.long,
+            device=mask.device,
+        )
+        group_count = mask.shape[0]
+
+    token_advantages = row_advantages.unsqueeze(
         1
     ).expand_as(trainer_logprobs)[mask].detach()
 
@@ -146,42 +264,15 @@ def clipped_policy_loss(
     if normalization == "token":
         loss = -surrogate_objective.mean()
     else:
-        sequence_token_counts = mask.sum(dim=1)
-
-        if bool(
-            torch.any(
-                sequence_token_counts == 0
-            ).item()
-        ):
-            raise ValueError(
-                "sequence normalization requires at "
-                "least one trainable token per example"
-            )
-
-        sequence_indices = (
-            torch.arange(
-                mask.shape[0],
-                device=mask.device,
-            )
-            .unsqueeze(1)
+        token_group_indices = (
+            row_group_indices.unsqueeze(1)
             .expand_as(mask)[mask]
         )
-        sequence_objective_sums = torch.zeros(
-            mask.shape[0],
-            dtype=surrogate_objective.dtype,
-            device=surrogate_objective.device,
-        ).scatter_add(
-            0,
-            sequence_indices,
-            surrogate_objective,
+        loss = -_mean_grouped_objective(
+            values=surrogate_objective,
+            group_indices=token_group_indices,
+            group_count=group_count,
         )
-        sequence_objectives = (
-            sequence_objective_sums
-            / sequence_token_counts.to(
-                dtype=surrogate_objective.dtype
-            )
-        )
-        loss = -sequence_objectives.mean()
 
     approximate_kl = (
         (ratio - 1.0) - log_ratio

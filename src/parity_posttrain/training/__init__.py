@@ -20,6 +20,9 @@ from parity_posttrain.training.closed_loop_artifact import (
     extract_closed_loop_snapshots,
     load_closed_loop_snapshots,
 )
+from parity_posttrain.training.closed_loop_rerollout import (
+    rerollout_agent_tasks,
+)
 from parity_posttrain.training.closed_loop_runner import (
     run_closed_loop_experiment,
 )
@@ -91,6 +94,7 @@ __all__ = [
     "gather_masked_causal_logprobs",
     "load_closed_loop_snapshots",
     "load_training_examples",
+    "rerollout_agent_tasks",
     "rescore_training_batch",
     "run_clipped_policy_step",
     "run_closed_loop_experiment",

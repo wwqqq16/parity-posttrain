@@ -24,10 +24,15 @@ from parity_posttrain.training.objective import (
     centered_reward_advantages,
     clipped_policy_loss,
 )
+from parity_posttrain.training.step import (
+    TrainingStepResult,
+    run_clipped_policy_step,
+)
 
 __all__ = [
     "ClippedPolicyLossResult",
     "IGNORE_INDEX",
+    "TrainingStepResult",
     "TrajectoryTrainingBatch",
     "TrajectoryTrainingExample",
     "build_generated_token_labels",
@@ -40,4 +45,5 @@ __all__ = [
     "gather_masked_causal_logprobs",
     "load_training_examples",
     "rescore_training_batch",
+    "run_clipped_policy_step",
 ]

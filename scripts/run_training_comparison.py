@@ -76,6 +76,15 @@ def parse_args(
         ],
     )
     parser.add_argument(
+        "--steps",
+        type=int,
+        default=1,
+        help=(
+            "Number of optimizer steps to run for each "
+            "normalization."
+        ),
+    )
+    parser.add_argument(
         "--trainable-parameter",
         action="append",
         dest="trainable_parameters",
@@ -187,6 +196,7 @@ def main() -> None:
             trainable_parameters
         ),
         normalizations=args.normalizations,
+        steps=args.steps,
         learning_rate=args.learning_rate,
         clip_epsilon=args.clip_epsilon,
         max_gradient_norm=(
@@ -223,6 +233,10 @@ def main() -> None:
         "Trainable parameter names:",
         list(summary.trainable_parameter_names),
     )
+    print(
+        "Optimizer steps:",
+        len(summary.rows[0].resolved_steps),
+    )
 
     print()
     print("Selected trajectories:")
@@ -244,25 +258,50 @@ def main() -> None:
             "Normalization:",
             row.normalization,
         )
-        print("Loss:", row.loss)
+        print("Step history:")
+
+        for step in row.resolved_steps:
+            print(
+                f"  Step {step.step_index}:",
+                f"loss={step.loss:.12e}",
+                (
+                    "gradient_norm="
+                    f"{step.gradient_norm:.12e}"
+                ),
+                f"mean_ratio={step.mean_ratio:.12e}",
+                (
+                    "approximate_kl="
+                    f"{step.approximate_kl:.12e}"
+                ),
+                (
+                    "clip_fraction="
+                    f"{step.clip_fraction:.12e}"
+                ),
+                (
+                    "parameter_delta="
+                    f"{step.parameter_delta:.12e}"
+                ),
+            )
+
+        print("Final loss:", row.loss)
         print(
-            "Gradient norm:",
+            "Final gradient norm:",
             row.gradient_norm,
         )
         print(
-            "Mean ratio:",
+            "Final mean ratio:",
             row.mean_ratio,
         )
         print(
-            "Approximate KL:",
+            "Final approximate KL:",
             row.approximate_kl,
         )
         print(
-            "Clip fraction:",
+            "Final clip fraction:",
             row.clip_fraction,
         )
         print(
-            "Parameter delta:",
+            "Final parameter delta:",
             row.parameter_delta,
         )
         print(

@@ -15,6 +15,10 @@ from parity_posttrain.training.comparison import (
     TrainingComparisonTask,
     training_comparison_to_dict,
 )
+from parity_posttrain.training.comparison_runner import (
+    run_training_comparison,
+    select_training_examples,
+)
 from parity_posttrain.training.example import (
     IGNORE_INDEX,
     TrajectoryTrainingExample,
@@ -59,5 +63,7 @@ __all__ = [
     "load_training_examples",
     "rescore_training_batch",
     "run_clipped_policy_step",
+    "run_training_comparison",
+    "select_training_examples",
     "training_comparison_to_dict",
 ]

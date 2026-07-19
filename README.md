@@ -219,12 +219,84 @@ src/parity_posttrain/
 
 scripts/
 ├── run_agent_benchmark.py
+├── run_agent_closed_loop.py
 ├── run_agent_parity.py
 ├── run_controlled_parity.py
 ├── run_hf_parity.py
+├── run_token_clipping_diagnostics.py
 ├── run_training_comparison.py
 └── summarize_controlled_parity.py
 ~~~
+
+## Token-Level PPO Clipping Diagnostics
+
+`clip_fraction` and `active_clip_fraction` measure different events:
+
+- `clip_fraction` is the fraction of generated tokens whose importance
+  ratio lies outside `[1 - epsilon, 1 + epsilon]`.
+- `active_clip_fraction` is the fraction for which PPO actually selects
+  the clipped surrogate branch.
+
+For example, a positive-advantage token with a ratio below the lower
+bound is outside the interval, but its objective is not actively
+clipped. The same distinction applies to a negative-advantage token
+above the upper bound.
+
+The following command performs repeated updates against fixed rollout
+logprobs and writes token-level diagnostics:
+
+~~~bash
+python scripts/run_token_clipping_diagnostics.py \
+  --artifact artifacts/agent_benchmark.json \
+  --task-ids catalog_004 shopping_004 \
+  --device cpu \
+  --trainable-parameters \
+    model.layers.23.self_attn.o_proj.weight \
+  --normalization trajectory \
+  --steps 10 \
+  --learning-rate 0.003 \
+  --clip-epsilon 0.2 \
+  --max-gradient-norm 1.0 \
+  --output artifacts/token_clipping_o_proj_steps10_lr3e3.json
+~~~
+
+### Observed clipping behavior
+
+This experiment used 89 generated training tokens.
+
+| Step | Minimum ratio | Maximum ratio | Out of range | Actively clipped |
+|---:|---:|---:|---:|---:|
+| 1 | 0.982909 | 1.027539 | 0 | 0 |
+| 7 | 0.954685 | 1.178572 | 0 | 0 |
+| 8 | 0.950111 | 1.207263 | 1 | 1 |
+| 9 | 0.945490 | 1.204743 | 1 | 1 |
+| 10 | 0.940903 | 1.202303 | 1 | 1 |
+
+The active token at steps 8 through 10 was:
+
+~~~text
+task_id: catalog_004
+turn_index: 1
+generated_token_index: 11
+token: " webcam"
+advantage: +0.5
+clip direction: positive_high
+~~~
+
+The token's probability ratio crossed the upper clipping bound at step
+8. Its direct PPO gradient was then clipped, while updates from the
+remaining shared-model tokens continued to move its probability toward
+the boundary.
+
+The final maximum parameter delta was:
+
+~~~text
+1.1736364103853703e-04
+~~~
+
+The diagnostic CLI uses the same batching, trainer-side rescoring,
+clipped objective, optimizer order, and trainable-parameter selection as
+the closed-loop training path.
 
 ## Installation
 
@@ -245,7 +317,7 @@ python -m ruff check .
 python -m mypy
 ~~~
 
-The current test suite contains 119 tests.
+The current test suite contains 183 tests.
 
 ## Generated Artifacts
 
@@ -266,6 +338,9 @@ The current project demonstrates:
 - batched trainer-side rescoring;
 - differentiable clipped policy optimization;
 - real model parameter updates;
+- persistent closed-loop rerollouts after training;
+- token-level PPO clipping diagnostics;
+- reusable pre-update training observers;
 - reproducible normalization comparisons.
 
 It is not yet:

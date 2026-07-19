@@ -135,26 +135,56 @@ class HuggingFaceRolloutBackend:
         self,
         model_name: str,
         device: torch.device | None = None,
+        *,
+        revision: str | None = None,
     ) -> None:
         """Load the tokenizer and causal language model."""
 
         if not model_name.strip():
             raise ValueError("model_name must not be empty")
 
+        if (
+            revision is not None
+            and not revision.strip()
+        ):
+            raise ValueError(
+                "revision must not be empty"
+            )
+
         self.model_name = model_name
+        self.model_revision = revision
         self.device = device or select_device()
         self.dtype = select_dtype(self.device)
 
-        self.tokenizer: Any = AutoTokenizer.from_pretrained(
-            model_name
-        )
-        loaded_model = cast(
-            Any,
-            AutoModelForCausalLM.from_pretrained(
-                model_name,
-                dtype=self.dtype,
-            ),
-        )
+        if revision is None:
+            self.tokenizer: Any = (
+                AutoTokenizer.from_pretrained(
+                    model_name
+                )
+            )
+            loaded_model = cast(
+                Any,
+                AutoModelForCausalLM.from_pretrained(
+                    model_name,
+                    dtype=self.dtype,
+                ),
+            )
+        else:
+            self.tokenizer = (
+                AutoTokenizer.from_pretrained(
+                    model_name,
+                    revision=revision,
+                )
+            )
+            loaded_model = cast(
+                Any,
+                AutoModelForCausalLM.from_pretrained(
+                    model_name,
+                    dtype=self.dtype,
+                    revision=revision,
+                ),
+            )
+
         loaded_model.to(self.device)
         loaded_model.eval()
         self.model = loaded_model

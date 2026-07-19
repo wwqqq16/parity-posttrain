@@ -183,6 +183,8 @@ def test_runs_all_normalizations_and_restores_model() -> None:
     ]
 
     for row in summary.rows:
+        assert len(row.steps) == 1
+        assert row.steps[0].step_index == 1
         assert row.trainable_token_count == 5
         assert row.mean_ratio == pytest.approx(1.0)
         assert row.approximate_kl == pytest.approx(
@@ -207,6 +209,98 @@ def test_runs_all_normalizations_and_restores_model() -> None:
         before,
     )
     assert model.training is False
+
+
+def test_runs_multiple_steps_and_records_history() -> None:
+    model = TinyCausalModel()
+    model.eval()
+    before = model.logit_bias.detach().clone()
+
+    summary = run_training_comparison(
+        model=model,
+        batch=make_batch(),
+        source_artifact="artifact.json",
+        model_name="tiny-model",
+        trainable_parameter_names=("logit_bias",),
+        normalizations=("token",),
+        steps=3,
+        learning_rate=0.1,
+        max_gradient_norm=10.0,
+    )
+
+    assert len(summary.rows) == 1
+    row = summary.rows[0]
+
+    assert [
+        step.step_index
+        for step in row.steps
+    ] == [1, 2, 3]
+
+    assert row.steps[0].mean_ratio == pytest.approx(
+        1.0
+    )
+    assert (
+        row.steps[0].approximate_kl
+        == pytest.approx(0.0)
+    )
+    assert row.steps[1].approximate_kl > 0.0
+
+    assert row.loss == row.steps[-1].loss
+    assert (
+        row.gradient_norm
+        == row.steps[-1].gradient_norm
+    )
+    assert row.mean_ratio == row.steps[-1].mean_ratio
+    assert (
+        row.approximate_kl
+        == row.steps[-1].approximate_kl
+    )
+    assert (
+        row.clip_fraction
+        == row.steps[-1].clip_fraction
+    )
+    assert (
+        row.parameter_delta
+        == row.steps[-1].parameter_delta
+    )
+    assert (
+        row.steps[-1].parameter_delta
+        > row.steps[0].parameter_delta
+    )
+
+    assert torch.equal(
+        model.logit_bias.detach(),
+        before,
+    )
+    assert model.training is False
+
+
+@pytest.mark.parametrize(
+    "steps",
+    [
+        0,
+        -1,
+        True,
+        1.5,
+    ],
+)
+def test_rejects_invalid_step_count(
+    steps: object,
+) -> None:
+    with pytest.raises(
+        ValueError,
+        match="steps must be a positive integer",
+    ):
+        run_training_comparison(
+            model=TinyCausalModel(),
+            batch=make_batch(),
+            source_artifact="artifact.json",
+            model_name="tiny-model",
+            trainable_parameter_names=(
+                "logit_bias",
+            ),
+            steps=steps,  # type: ignore[arg-type]
+        )
 
 
 def test_rejects_duplicate_normalizations() -> None:

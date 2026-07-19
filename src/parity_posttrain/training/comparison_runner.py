@@ -15,6 +15,7 @@ from parity_posttrain.training.batch import (
 from parity_posttrain.training.comparison import (
     TaskLogprobShift,
     TrainingComparisonRow,
+    TrainingComparisonStep,
     TrainingComparisonSummary,
     TrainingComparisonTask,
 )
@@ -24,11 +25,11 @@ from parity_posttrain.training.example import (
 from parity_posttrain.training.logprobs import (
     rescore_training_batch,
 )
+from parity_posttrain.training.loop import (
+    run_clipped_policy_training,
+)
 from parity_posttrain.training.objective import (
     PolicyNormalization,
-)
-from parity_posttrain.training.step import (
-    run_clipped_policy_step,
 )
 
 
@@ -249,29 +250,6 @@ def _restore_parameter_values(
             parameter.copy_(snapshot)
 
 
-def _maximum_parameter_delta(
-    parameters: Sequence[torch.nn.Parameter],
-    snapshots: Sequence[torch.Tensor],
-) -> float:
-    """Return the maximum absolute trainable-parameter change."""
-
-    return max(
-        float(
-            (
-                parameter.detach() - snapshot
-            )
-            .abs()
-            .max()
-            .item()
-        )
-        for parameter, snapshot in zip(
-            parameters,
-            snapshots,
-            strict=True,
-        )
-    )
-
-
 def _build_task_shifts(
     *,
     shifts: torch.Tensor,
@@ -335,6 +313,7 @@ def run_training_comparison(
         "sequence",
         "trajectory",
     ),
+    steps: int = 1,
     learning_rate: float = 0.05,
     clip_epsilon: float = 0.2,
     max_gradient_norm: float = 1.0,
@@ -350,6 +329,15 @@ def run_training_comparison(
 
     if not model_name:
         raise ValueError("model_name must not be empty")
+
+    if (
+        isinstance(steps, bool)
+        or not isinstance(steps, int)
+        or steps <= 0
+    ):
+        raise ValueError(
+            "steps must be a positive integer"
+        )
 
     if (
         not math.isfinite(learning_rate)
@@ -451,14 +439,47 @@ def run_training_comparison(
                 trainable_parameters,
                 lr=learning_rate,
             )
-            step = run_clipped_policy_step(
+            loop_result = run_clipped_policy_training(
                 model=model,
                 optimizer=optimizer,
                 batch=controlled_batch,
+                steps=steps,
                 clip_epsilon=clip_epsilon,
                 max_gradient_norm=max_gradient_norm,
                 normalization=normalization,
             )
+            comparison_steps = tuple(
+                TrainingComparisonStep(
+                    step_index=step_index,
+                    loss=step_result.loss,
+                    gradient_norm=(
+                        step_result.gradient_norm
+                    ),
+                    mean_ratio=step_result.mean_ratio,
+                    approximate_kl=(
+                        step_result.approximate_kl
+                    ),
+                    clip_fraction=(
+                        step_result.clip_fraction
+                    ),
+                    trainable_token_count=(
+                        step_result.trainable_token_count
+                    ),
+                    parameter_delta=parameter_delta,
+                )
+                for step_index, (
+                    step_result,
+                    parameter_delta,
+                ) in enumerate(
+                    zip(
+                        loop_result.steps,
+                        loop_result.parameter_deltas,
+                        strict=True,
+                    ),
+                    start=1,
+                )
+            )
+            final_step = loop_result.final_step
 
             model.eval()
 
@@ -483,19 +504,16 @@ def run_training_comparison(
 
             row = TrainingComparisonRow(
                 normalization=normalization,
-                loss=step.loss,
-                gradient_norm=step.gradient_norm,
-                mean_ratio=step.mean_ratio,
-                approximate_kl=step.approximate_kl,
-                clip_fraction=step.clip_fraction,
+                loss=final_step.loss,
+                gradient_norm=final_step.gradient_norm,
+                mean_ratio=final_step.mean_ratio,
+                approximate_kl=final_step.approximate_kl,
+                clip_fraction=final_step.clip_fraction,
                 trainable_token_count=(
-                    step.trainable_token_count
+                    final_step.trainable_token_count
                 ),
                 parameter_delta=(
-                    _maximum_parameter_delta(
-                        trainable_parameters,
-                        parameter_snapshots,
-                    )
+                    loop_result.final_parameter_delta
                 ),
                 mean_absolute_logprob_shift=float(
                     absolute_shifts.mean().item()
@@ -508,6 +526,7 @@ def run_training_comparison(
                     batch=controlled_batch,
                     tasks=tasks,
                 ),
+                steps=comparison_steps,
             )
             row.validate()
             rows.append(row)

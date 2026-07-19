@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 from types import SimpleNamespace
 from typing import Any
 
@@ -113,6 +114,14 @@ def test_training_loop_runs_multiple_steps() -> None:
     assert result.completed_steps == 3
     assert len(result.steps) == 3
     assert result.final_step is result.steps[-1]
+    assert len(result.parameter_deltas) == 3
+    assert result.final_parameter_delta == (
+        result.parameter_deltas[-1]
+    )
+    assert all(
+        delta > 0.0
+        for delta in result.parameter_deltas
+    )
 
     assert result.steps[0].mean_ratio == pytest.approx(
         1.0
@@ -157,6 +166,33 @@ def test_training_loop_supports_trajectory_normalization() -> None:
         step.normalization == "trajectory"
         for step in result.steps
     )
+
+
+def test_training_loop_rejects_delta_count_mismatch() -> None:
+    model = TrainableLogitModel()
+    optimizer = torch.optim.SGD(
+        model.parameters(),
+        lr=0.1,
+    )
+
+    result = run_clipped_policy_training(
+        model=model,
+        optimizer=optimizer,
+        batch=make_batch(),
+        steps=2,
+    )
+    invalid = replace(
+        result,
+        parameter_deltas=(
+            result.parameter_deltas[0],
+        ),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="parameter deltas must match",
+    ):
+        invalid.validate()
 
 
 @pytest.mark.parametrize(

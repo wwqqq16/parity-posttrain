@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import torch
@@ -25,6 +26,7 @@ class TrainingLoopResult:
     requested_steps: int
     normalization: PolicyNormalization
     steps: tuple[TrainingStepResult, ...]
+    parameter_deltas: tuple[float, ...]
 
     @property
     def completed_steps(self) -> int:
@@ -43,6 +45,17 @@ class TrainingLoopResult:
 
         return self.steps[-1]
 
+    @property
+    def final_parameter_delta(self) -> float:
+        """Return the cumulative parameter delta after the final step."""
+
+        if not self.parameter_deltas:
+            raise ValueError(
+                "training loop contains no parameter deltas"
+            )
+
+        return self.parameter_deltas[-1]
+
     def validate(self) -> None:
         """Validate loop-level metrics."""
 
@@ -60,9 +73,22 @@ class TrainingLoopResult:
                 "completed steps must match requested_steps"
             )
 
+        if len(self.parameter_deltas) != self.requested_steps:
+            raise ValueError(
+                "parameter deltas must match requested_steps"
+            )
+
         if not self.steps:
             raise ValueError(
                 "steps must not be empty"
+            )
+
+        if not all(
+            math.isfinite(delta) and delta >= 0
+            for delta in self.parameter_deltas
+        ):
+            raise ValueError(
+                "parameter deltas must be finite and non-negative"
             )
 
         trainable_token_count = (
@@ -84,6 +110,60 @@ class TrainingLoopResult:
                     "all steps must use the same "
                     "trainable token count"
                 )
+
+
+def _optimizer_parameters(
+    optimizer: torch.optim.Optimizer,
+) -> tuple[torch.Tensor, ...]:
+    """Return unique tensors managed by an optimizer."""
+
+    parameters: list[torch.Tensor] = []
+    seen_ids: set[int] = set()
+
+    for group in optimizer.param_groups:
+        for candidate in group["params"]:
+            if not isinstance(candidate, torch.Tensor):
+                raise TypeError(
+                    "optimizer parameters must be tensors"
+                )
+
+            candidate_id = id(candidate)
+            if candidate_id in seen_ids:
+                continue
+
+            seen_ids.add(candidate_id)
+            parameters.append(candidate)
+
+    if not parameters:
+        raise ValueError(
+            "optimizer must contain at least one parameter"
+        )
+
+    return tuple(parameters)
+
+
+def _maximum_parameter_delta(
+    parameters: tuple[torch.Tensor, ...],
+    snapshots: tuple[torch.Tensor, ...],
+) -> float:
+    """Return maximum absolute change from initial parameters."""
+
+    return max(
+        float(
+            (
+                parameter.detach()
+                - snapshot
+            )
+            .abs()
+            .max()
+            .item()
+        )
+        for parameter, snapshot in zip(
+            parameters,
+            snapshots,
+            strict=True,
+        )
+    )
 
 
 def run_clipped_policy_training(
@@ -108,7 +188,15 @@ def run_clipped_policy_training(
         )
 
     batch.validate()
+
+    parameters = _optimizer_parameters(optimizer)
+    snapshots = tuple(
+        parameter.detach().clone()
+        for parameter in parameters
+    )
+
     results: list[TrainingStepResult] = []
+    parameter_deltas: list[float] = []
 
     for _ in range(steps):
         result = run_clipped_policy_step(
@@ -120,11 +208,18 @@ def run_clipped_policy_training(
             normalization=normalization,
         )
         results.append(result)
+        parameter_deltas.append(
+            _maximum_parameter_delta(
+                parameters,
+                snapshots,
+            )
+        )
 
     loop_result = TrainingLoopResult(
         requested_steps=steps,
         normalization=normalization,
         steps=tuple(results),
+        parameter_deltas=tuple(parameter_deltas),
     )
     loop_result.validate()
 

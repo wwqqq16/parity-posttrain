@@ -100,7 +100,6 @@ def test_main_writes_provenance(
         trainable_parameter_names=(
             "model.norm.weight",
         ),
-        optimizer_steps=2,
         tasks=(),
         rows=(),
     )

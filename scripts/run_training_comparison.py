@@ -265,7 +265,7 @@ def main(
     )
     print(
         "Optimizer steps:",
-        summary.optimizer_steps,
+        args.steps,
     )
 
     print()

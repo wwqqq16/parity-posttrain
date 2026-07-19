@@ -163,7 +163,13 @@ def test_serializes_closed_loop_summary() -> None:
         make_summary()
     )
 
-    assert payload["schema_version"] == 2
+    assert payload["schema_version"] == 3
+    assert (
+        payload["training"]["steps"][0][
+            "active_clip_fraction"
+        ]
+        == 0.0
+    )
     assert payload["model_name"] == "tiny-model"
     assert payload["training"]["optimizer_steps"] == 1
     assert payload["deltas"]["total_reward"] == 1.0

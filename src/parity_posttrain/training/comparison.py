@@ -98,8 +98,23 @@ class TrainingComparisonStep:
     trainable_token_count: int
     parameter_delta: float
 
+    active_clip_fraction: float = 0.0
+
     def validate(self) -> None:
         """Validate one optimizer-step record."""
+
+        if (
+            not math.isfinite(
+                self.active_clip_fraction
+            )
+            or not 0.0
+            <= self.active_clip_fraction
+            <= 1.0
+        ):
+            raise ValueError(
+                "active_clip_fraction must be "
+                "between zero and one"
+            )
 
         if (
             isinstance(self.step_index, bool)

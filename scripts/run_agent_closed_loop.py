@@ -324,6 +324,14 @@ def main(
                 f"{step.approximate_kl:.12e}"
             ),
             (
+                "clip_fraction="
+                f"{step.clip_fraction:.12e}"
+            ),
+            (
+                "active_clip_fraction="
+                f"{step.active_clip_fraction:.12e}"
+            ),
+            (
                 "parameter_delta="
                 f"{step.parameter_delta:.12e}"
             ),

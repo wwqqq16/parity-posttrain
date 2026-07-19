@@ -548,7 +548,7 @@ def closed_loop_summary_to_dict(
     summary.validate()
 
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "source_artifact": summary.source_artifact,
         "model_name": summary.model_name,
         "training": {
@@ -564,6 +564,9 @@ def closed_loop_summary_to_dict(
                         step.approximate_kl
                     ),
                     "clip_fraction": step.clip_fraction,
+                    "active_clip_fraction": (
+                        step.active_clip_fraction
+                    ),
                     "trainable_token_count": (
                         step.trainable_token_count
                     ),

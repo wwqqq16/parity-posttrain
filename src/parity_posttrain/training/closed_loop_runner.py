@@ -117,6 +117,9 @@ def _build_training_steps(
                 clip_fraction=(
                     step_result.clip_fraction
                 ),
+                active_clip_fraction=(
+                    step_result.active_clip_fraction
+                ),
                 trainable_token_count=(
                     step_result.trainable_token_count
                 ),

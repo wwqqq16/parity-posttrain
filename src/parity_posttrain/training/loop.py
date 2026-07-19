@@ -14,6 +14,7 @@ from parity_posttrain.training.objective import (
     PolicyNormalization,
 )
 from parity_posttrain.training.step import (
+    TrainingStepObserver,
     TrainingStepResult,
     run_clipped_policy_step,
 )
@@ -175,6 +176,7 @@ def run_clipped_policy_training(
     clip_epsilon: float = 0.2,
     max_gradient_norm: float = 1.0,
     normalization: PolicyNormalization = "token",
+    observer: TrainingStepObserver | None = None,
 ) -> TrainingLoopResult:
     """Run repeated updates against fixed rollout logprobs."""
 
@@ -198,7 +200,7 @@ def run_clipped_policy_training(
     results: list[TrainingStepResult] = []
     parameter_deltas: list[float] = []
 
-    for _ in range(steps):
+    for step_index in range(1, steps + 1):
         result = run_clipped_policy_step(
             model=model,
             optimizer=optimizer,
@@ -206,6 +208,8 @@ def run_clipped_policy_training(
             clip_epsilon=clip_epsilon,
             max_gradient_norm=max_gradient_norm,
             normalization=normalization,
+            step_index=step_index,
+            observer=observer,
         )
         results.append(result)
         parameter_deltas.append(

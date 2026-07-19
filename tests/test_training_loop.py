@@ -11,6 +11,7 @@ import pytest
 import torch
 
 from parity_posttrain.training import (
+    TokenClippingDiagnostic,
     build_trajectory_training_example,
     collate_training_examples,
     run_clipped_policy_training,
@@ -223,3 +224,98 @@ def test_training_loop_rejects_invalid_steps(
             batch=make_batch(),
             steps=steps,  # type: ignore[arg-type]
         )
+
+
+def test_training_loop_observer_receives_pre_update_diagnostics(
+) -> None:
+    model = TrainableLogitModel()
+    optimizer = torch.optim.SGD(
+        model.parameters(),
+        lr=0.1,
+    )
+    observations: list[
+        tuple[
+            int,
+            tuple[TokenClippingDiagnostic, ...],
+        ]
+    ] = []
+
+    def observer(
+        step_index: int,
+        diagnostics: tuple[
+            TokenClippingDiagnostic,
+            ...,
+        ],
+    ) -> None:
+        observations.append(
+            (step_index, diagnostics)
+        )
+
+    run_clipped_policy_training(
+        model=model,
+        optimizer=optimizer,
+        batch=make_batch(),
+        steps=3,
+        normalization="token",
+        observer=observer,
+    )
+
+    assert [
+        step_index
+        for step_index, _ in observations
+    ] == [1, 2, 3]
+
+    assert all(
+        len(diagnostics) == 2
+        for _, diagnostics in observations
+    )
+
+    first_diagnostics = observations[0][1]
+    assert first_diagnostics[0].task_id == "positive"
+    assert first_diagnostics[1].task_id == "negative"
+    assert first_diagnostics[0].ratio == pytest.approx(
+        1.0
+    )
+    assert first_diagnostics[1].ratio == pytest.approx(
+        1.0
+    )
+
+    second_diagnostics = observations[1][1]
+    assert second_diagnostics[0].ratio > 1.0
+    assert second_diagnostics[1].ratio < 1.0
+
+
+def test_observer_error_prevents_optimizer_update() -> None:
+    model = TrainableLogitModel()
+    optimizer = torch.optim.SGD(
+        model.parameters(),
+        lr=0.1,
+    )
+    before = model.logits.detach().clone()
+
+    def observer(
+        step_index: int,
+        diagnostics: tuple[
+            TokenClippingDiagnostic,
+            ...,
+        ],
+    ) -> None:
+        del step_index, diagnostics
+        raise RuntimeError("observer failed")
+
+    with pytest.raises(
+        RuntimeError,
+        match="observer failed",
+    ):
+        run_clipped_policy_training(
+            model=model,
+            optimizer=optimizer,
+            batch=make_batch(),
+            steps=1,
+            observer=observer,
+        )
+
+    assert torch.equal(
+        model.logits.detach(),
+        before,
+    )

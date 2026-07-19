@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
 
 from parity_posttrain.training.batch import (
     TrajectoryTrainingBatch,
+)
+from parity_posttrain.training.diagnostics import (
+    TokenClippingDiagnostic,
+    build_token_clipping_diagnostics,
 )
 from parity_posttrain.training.logprobs import (
     rescore_training_batch,
@@ -17,6 +22,14 @@ from parity_posttrain.training.objective import (
     PolicyNormalization,
     clipped_policy_loss,
 )
+
+TrainingStepObserver = Callable[
+    [
+        int,
+        tuple[TokenClippingDiagnostic, ...],
+    ],
+    None,
+]
 
 
 @dataclass(frozen=True)
@@ -41,8 +54,19 @@ def run_clipped_policy_step(
     clip_epsilon: float = 0.2,
     max_gradient_norm: float = 1.0,
     normalization: PolicyNormalization = "token",
+    step_index: int = 1,
+    observer: TrainingStepObserver | None = None,
 ) -> TrainingStepResult:
     """Run one differentiable clipped policy update."""
+
+    if (
+        isinstance(step_index, bool)
+        or not isinstance(step_index, int)
+        or step_index <= 0
+    ):
+        raise ValueError(
+            "step_index must be a positive integer"
+        )
 
     if (
         not isinstance(max_gradient_norm, (int, float))
@@ -83,6 +107,17 @@ def run_clipped_policy_step(
         torch.isfinite(objective.loss).item()
     ):
         raise ValueError("policy loss must be finite")
+
+    if observer is not None:
+        observer(
+            step_index,
+            build_token_clipping_diagnostics(
+                trainer_logprobs=trainer_logprobs,
+                batch=batch,
+                clip_epsilon=clip_epsilon,
+                normalization=normalization,
+            ),
+        )
 
     torch.autograd.backward(objective.loss)
 

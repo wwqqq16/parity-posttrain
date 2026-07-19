@@ -20,6 +20,9 @@ from parity_posttrain.training.closed_loop_artifact import (
     extract_closed_loop_snapshots,
     load_closed_loop_snapshots,
 )
+from parity_posttrain.training.closed_loop_runner import (
+    run_closed_loop_experiment,
+)
 from parity_posttrain.training.comparison import (
     TaskLogprobShift,
     TrainingComparisonRow,
@@ -90,6 +93,7 @@ __all__ = [
     "load_training_examples",
     "rescore_training_batch",
     "run_clipped_policy_step",
+    "run_closed_loop_experiment",
     "run_clipped_policy_training",
     "run_training_comparison",
     "select_training_examples",

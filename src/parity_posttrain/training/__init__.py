@@ -41,6 +41,10 @@ from parity_posttrain.training.comparison_runner import (
     run_training_comparison,
     select_training_examples,
 )
+from parity_posttrain.training.diagnostics import (
+    TokenClippingDiagnostic,
+    build_token_clipping_diagnostics,
+)
 from parity_posttrain.training.example import (
     IGNORE_INDEX,
     TrajectoryTrainingExample,
@@ -116,4 +120,6 @@ __all__ = [
     "run_training_comparison",
     "select_training_examples",
     "training_comparison_to_dict",
+    "TokenClippingDiagnostic",
+    "build_token_clipping_diagnostics",
 ]

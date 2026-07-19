@@ -11,6 +11,7 @@ from parity_posttrain.training import (
     ClosedLoopTaskSnapshot,
     build_trajectory_training_example,
     collate_training_examples,
+    fingerprint_generated_token_ids,
     run_closed_loop_experiment,
 )
 
@@ -71,6 +72,11 @@ def make_snapshot(
         answer_correct=answer_correct,
         generation_count=1,
         generated_token_count=1,
+        trajectory_fingerprint=(
+            fingerprint_generated_token_ids(
+                ((1,),)
+            )
+        ),
     )
 
 

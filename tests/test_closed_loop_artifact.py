@@ -20,8 +20,8 @@ def make_record(
     status: str,
     reward: float,
     answer_correct: bool,
-    generation_count: int = 1,
-    generated_token_count: int = 10,
+    generation_count: int,
+    generated_token_count: int,
 ) -> dict[str, object]:
     """Create one benchmark record."""
 
@@ -38,33 +38,72 @@ def make_record(
     }
 
 
+def make_task_result(
+    task_id: str,
+    *,
+    category: str,
+    status: str,
+    reward: float,
+    answer_correct: bool,
+    token_sequences: tuple[
+        tuple[int, ...],
+        ...,
+    ],
+) -> dict[str, object]:
+    """Create one benchmark task result."""
+
+    return {
+        "benchmark_record": make_record(
+            task_id,
+            category=category,
+            status=status,
+            reward=reward,
+            answer_correct=answer_correct,
+            generation_count=len(token_sequences),
+            generated_token_count=sum(
+                len(token_ids)
+                for token_ids in token_sequences
+            ),
+        ),
+        "run": {
+            "generations": [
+                {
+                    "generated_token_ids": list(
+                        token_ids
+                    )
+                }
+                for token_ids in token_sequences
+            ]
+        },
+    }
+
+
 def make_payload() -> dict[str, object]:
     """Create a two-task benchmark payload."""
 
     return {
         "tasks": [
-            {
-                "benchmark_record": make_record(
-                    "catalog",
-                    category="catalog",
-                    status="completed",
-                    reward=1.0,
-                    answer_correct=True,
-                    generation_count=2,
-                    generated_token_count=42,
-                )
-            },
-            {
-                "benchmark_record": make_record(
-                    "shopping",
-                    category="shopping",
-                    status="protocol_error",
-                    reward=0.0,
-                    answer_correct=False,
-                    generation_count=1,
-                    generated_token_count=47,
-                )
-            },
+            make_task_result(
+                "catalog",
+                category="catalog",
+                status="completed",
+                reward=1.0,
+                answer_correct=True,
+                token_sequences=(
+                    tuple(range(20)),
+                    tuple(range(20, 42)),
+                ),
+            ),
+            make_task_result(
+                "shopping",
+                category="shopping",
+                status="protocol_error",
+                reward=0.0,
+                answer_correct=False,
+                token_sequences=(
+                    tuple(range(47)),
+                ),
+            ),
         ]
     }
 
@@ -85,7 +124,13 @@ def test_extracts_snapshots_in_artifact_order() -> None:
     assert snapshots[0].answer_correct is True
     assert snapshots[0].generation_count == 2
     assert snapshots[0].generated_token_count == 42
-    assert snapshots[1].status == "protocol_error"
+    assert len(
+        snapshots[0].trajectory_fingerprint
+    ) == 64
+    assert (
+        snapshots[0].trajectory_fingerprint
+        != snapshots[1].trajectory_fingerprint
+    )
 
 
 def test_selects_snapshots_in_requested_order() -> None:
@@ -150,22 +195,43 @@ def test_rejects_duplicate_requested_task_ids() -> None:
 
 
 def test_rejects_duplicate_artifact_task_ids() -> None:
-    record = make_record(
+    task_result = make_task_result(
         "duplicate",
         category="catalog",
         status="completed",
         reward=1.0,
         answer_correct=True,
+        token_sequences=((1,),),
     )
     payload = {
         "tasks": [
-            {"benchmark_record": record},
-            {"benchmark_record": record},
+            task_result,
+            task_result,
         ]
     }
 
     with pytest.raises(
         ValueError,
         match="benchmark task IDs must be unique",
+    ):
+        extract_closed_loop_snapshots(payload)
+
+
+def test_rejects_record_token_count_mismatch() -> None:
+    payload = make_payload()
+    tasks = payload["tasks"]
+
+    assert isinstance(tasks, list)
+    first = tasks[0]
+
+    assert isinstance(first, dict)
+    record = first["benchmark_record"]
+
+    assert isinstance(record, dict)
+    record["generated_token_count"] = 999
+
+    with pytest.raises(
+        ValueError,
+        match="generated_token_count does not match",
     ):
         extract_closed_loop_snapshots(payload)

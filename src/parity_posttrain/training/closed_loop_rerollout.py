@@ -15,6 +15,9 @@ from parity_posttrain.evals.trajectory_evaluator import (
 from parity_posttrain.training.closed_loop import (
     ClosedLoopTaskSnapshot,
 )
+from parity_posttrain.training.trajectory_fingerprint import (
+    fingerprint_generated_token_ids,
+)
 
 
 class AgentTaskRunner(Protocol):
@@ -112,6 +115,17 @@ def rerollout_agent_tasks(
             ),
             generated_token_count=(
                 generated_token_count
+            ),
+            trajectory_fingerprint=(
+                fingerprint_generated_token_ids(
+                    tuple(
+                        tuple(
+                            generation.generated_token_ids
+                        )
+                        for generation
+                        in run_result.generations
+                    )
+                )
             ),
         )
         snapshot.validate()

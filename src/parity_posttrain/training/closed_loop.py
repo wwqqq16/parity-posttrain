@@ -43,6 +43,7 @@ class ClosedLoopTaskSnapshot:
     answer_correct: bool
     generation_count: int
     generated_token_count: int
+    trajectory_fingerprint: str
 
     def validate(self) -> None:
         """Validate one task snapshot."""
@@ -80,6 +81,18 @@ class ClosedLoopTaskSnapshot:
             name="generated_token_count",
             value=self.generated_token_count,
         )
+
+        if (
+            len(self.trajectory_fingerprint) != 64
+            or any(
+                character not in "0123456789abcdef"
+                for character in self.trajectory_fingerprint
+            )
+        ):
+            raise ValueError(
+                "trajectory_fingerprint must be a "
+                "lowercase SHA-256 hexadecimal digest"
+            )
 
 
 @dataclass(frozen=True)
@@ -270,6 +283,15 @@ class ClosedLoopTaskComparison:
         return (
             self.after.generated_token_count
             - self.before.generated_token_count
+        )
+
+    @property
+    def trajectory_changed(self) -> bool:
+        """Return whether generated token IDs changed."""
+
+        return (
+            self.before.trajectory_fingerprint
+            != self.after.trajectory_fingerprint
         )
 
     def validate(self) -> None:
@@ -490,6 +512,9 @@ def _snapshot_to_dict(
         "generated_token_count": (
             snapshot.generated_token_count
         ),
+        "trajectory_fingerprint": (
+            snapshot.trajectory_fingerprint
+        ),
     }
 
 
@@ -523,7 +548,7 @@ def closed_loop_summary_to_dict(
     summary.validate()
 
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "source_artifact": summary.source_artifact,
         "model_name": summary.model_name,
         "training": {
@@ -577,6 +602,9 @@ def closed_loop_summary_to_dict(
                     ),
                     "generated_token_count": (
                         task.generated_token_count_delta
+                    ),
+                    "trajectory_changed": (
+                        task.trajectory_changed
                     ),
                 },
             }

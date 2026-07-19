@@ -9,6 +9,9 @@ from pathlib import Path
 from parity_posttrain.training.closed_loop import (
     ClosedLoopTaskSnapshot,
 )
+from parity_posttrain.training.trajectory_fingerprint import (
+    fingerprint_generated_token_ids,
+)
 
 
 def _require_mapping(
@@ -121,10 +124,84 @@ def _require_float(
     return float(value)
 
 
+def _extract_generated_token_sequences(
+    task_result: Mapping[str, object],
+    *,
+    field: str,
+) -> tuple[tuple[int, ...], ...]:
+    """Read generated token IDs while preserving turns."""
+
+    run_field = f"{field}.run"
+    run = _require_mapping(
+        task_result.get("run"),
+        field=run_field,
+    )
+    generations_field = f"{run_field}.generations"
+    generations = _require_list(
+        run.get("generations"),
+        field=generations_field,
+    )
+
+    if not generations:
+        raise ValueError(
+            f"{generations_field} must not be empty"
+        )
+
+    token_sequences: list[tuple[int, ...]] = []
+
+    for generation_index, generation_value in enumerate(
+        generations
+    ):
+        generation_field = (
+            f"{generations_field}[{generation_index}]"
+        )
+        generation = _require_mapping(
+            generation_value,
+            field=generation_field,
+        )
+        token_values = _require_list(
+            generation.get("generated_token_ids"),
+            field=(
+                f"{generation_field}."
+                "generated_token_ids"
+            ),
+        )
+
+        token_ids: list[int] = []
+
+        for token_index, token_value in enumerate(
+            token_values
+        ):
+            if (
+                isinstance(token_value, bool)
+                or not isinstance(token_value, int)
+                or token_value < 0
+            ):
+                raise ValueError(
+                    f"{generation_field}."
+                    "generated_token_ids"
+                    f"[{token_index}] must be a "
+                    "non-negative integer"
+                )
+
+            token_ids.append(token_value)
+
+        if not token_ids:
+            raise ValueError(
+                f"{generation_field}."
+                "generated_token_ids must not be empty"
+            )
+
+        token_sequences.append(tuple(token_ids))
+
+    return tuple(token_sequences)
+
+
 def _snapshot_from_record(
     record: Mapping[str, object],
     *,
     field: str,
+    trajectory_fingerprint: str,
 ) -> ClosedLoopTaskSnapshot:
     """Construct one snapshot from a benchmark record."""
 
@@ -163,6 +240,9 @@ def _snapshot_from_record(
             record,
             "generated_token_count",
             field=field,
+        ),
+        trajectory_fingerprint=(
+            trajectory_fingerprint
         ),
     )
     snapshot.validate()
@@ -206,10 +286,44 @@ def extract_closed_loop_snapshots(
             task_result.get("benchmark_record"),
             field=record_field,
         )
+        token_sequences = (
+            _extract_generated_token_sequences(
+                task_result,
+                field=task_field,
+            )
+        )
         snapshot = _snapshot_from_record(
             record,
             field=record_field,
+            trajectory_fingerprint=(
+                fingerprint_generated_token_ids(
+                    token_sequences
+                )
+            ),
         )
+
+        if (
+            len(token_sequences)
+            != snapshot.generation_count
+        ):
+            raise ValueError(
+                f"{task_field} generation_count does not "
+                "match run.generations"
+            )
+
+        actual_token_count = sum(
+            len(token_ids)
+            for token_ids in token_sequences
+        )
+
+        if (
+            actual_token_count
+            != snapshot.generated_token_count
+        ):
+            raise ValueError(
+                f"{task_field} generated_token_count does "
+                "not match run.generations"
+            )
 
         if snapshot.task_id in snapshots_by_id:
             raise ValueError(

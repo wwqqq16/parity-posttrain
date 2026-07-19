@@ -347,6 +347,10 @@ def main(
                 f"{task.before.answer_correct}"
                 f"->{task.after.answer_correct}"
             ),
+            (
+                "trajectory_changed="
+                f"{task.trajectory_changed}"
+            ),
         )
 
     print()

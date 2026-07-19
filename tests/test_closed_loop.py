@@ -13,6 +13,7 @@ from parity_posttrain.training import (
     TrainingComparisonStep,
     build_closed_loop_aggregate,
     closed_loop_summary_to_dict,
+    fingerprint_generated_token_ids,
 )
 
 
@@ -25,8 +26,17 @@ def make_snapshot(
     answer_correct: bool,
     generation_count: int = 1,
     generated_token_count: int = 10,
+    token_sequences: tuple[
+        tuple[int, ...],
+        ...,
+    ] | None = None,
 ) -> ClosedLoopTaskSnapshot:
     """Create one test task snapshot."""
+
+    if token_sequences is None:
+        token_sequences = (
+            tuple(range(generated_token_count)),
+        )
 
     return ClosedLoopTaskSnapshot(
         task_id=task_id,
@@ -36,6 +46,11 @@ def make_snapshot(
         answer_correct=answer_correct,
         generation_count=generation_count,
         generated_token_count=generated_token_count,
+        trajectory_fingerprint=(
+            fingerprint_generated_token_ids(
+                token_sequences
+            )
+        ),
     )
 
 
@@ -93,6 +108,10 @@ def make_tasks() -> tuple[
                 answer_correct=True,
                 generation_count=2,
                 generated_token_count=16,
+                token_sequences=(
+                    tuple(range(8)),
+                    tuple(range(8, 16)),
+                ),
             ),
         ),
     )
@@ -144,7 +163,7 @@ def test_serializes_closed_loop_summary() -> None:
         make_summary()
     )
 
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 2
     assert payload["model_name"] == "tiny-model"
     assert payload["training"]["optimizer_steps"] == 1
     assert payload["deltas"]["total_reward"] == 1.0
@@ -164,6 +183,13 @@ def test_serializes_closed_loop_summary() -> None:
         tasks[1]["deltas"]["generated_token_count"]
         == 6
     )
+    assert (
+        tasks[1]["deltas"]["trajectory_changed"]
+        is True
+    )
+    assert len(
+        tasks[1]["before"]["trajectory_fingerprint"]
+    ) == 64
 
 
 def test_rejects_mismatched_task_identifiers() -> None:

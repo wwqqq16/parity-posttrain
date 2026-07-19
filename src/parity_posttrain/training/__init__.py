@@ -70,6 +70,9 @@ from parity_posttrain.training.step import (
     TrainingStepResult,
     run_clipped_policy_step,
 )
+from parity_posttrain.training.trajectory_fingerprint import (
+    fingerprint_generated_token_ids,
+)
 
 __all__ = [
     "ClippedPolicyLossResult",
@@ -99,6 +102,7 @@ __all__ = [
     "collate_training_examples",
     "extract_closed_loop_snapshots",
     "extract_training_examples",
+    "fingerprint_generated_token_ids",
     "gather_masked_causal_logprobs",
     "load_closed_loop_snapshots",
     "load_training_examples",

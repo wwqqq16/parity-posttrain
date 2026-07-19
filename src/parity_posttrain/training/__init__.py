@@ -11,6 +11,7 @@ from parity_posttrain.training.batch import (
 from parity_posttrain.training.comparison import (
     TaskLogprobShift,
     TrainingComparisonRow,
+    TrainingComparisonStep,
     TrainingComparisonSummary,
     TrainingComparisonTask,
     training_comparison_to_dict,
@@ -51,6 +52,7 @@ __all__ = [
     "PolicyNormalization",
     "TaskLogprobShift",
     "TrainingComparisonRow",
+    "TrainingComparisonStep",
     "TrainingComparisonSummary",
     "TrainingComparisonTask",
     "TrainingLoopResult",

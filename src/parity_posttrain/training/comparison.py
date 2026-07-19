@@ -86,6 +86,74 @@ class TaskLogprobShift:
 
 
 @dataclass(frozen=True)
+class TrainingComparisonStep:
+    """Metrics from one optimizer step."""
+
+    step_index: int
+    loss: float
+    gradient_norm: float
+    mean_ratio: float
+    approximate_kl: float
+    clip_fraction: float
+    trainable_token_count: int
+    parameter_delta: float
+
+    def validate(self) -> None:
+        """Validate one optimizer-step record."""
+
+        if (
+            isinstance(self.step_index, bool)
+            or not isinstance(self.step_index, int)
+            or self.step_index <= 0
+        ):
+            raise ValueError(
+                "step_index must be a positive integer"
+            )
+
+        finite_values = (
+            self.loss,
+            self.gradient_norm,
+            self.mean_ratio,
+            self.approximate_kl,
+            self.clip_fraction,
+            self.parameter_delta,
+        )
+
+        if not all(
+            math.isfinite(value)
+            for value in finite_values
+        ):
+            raise ValueError(
+                "training-step metrics must be finite"
+            )
+
+        if self.gradient_norm < 0:
+            raise ValueError(
+                "gradient_norm must be non-negative"
+            )
+
+        if self.mean_ratio < 0:
+            raise ValueError(
+                "mean_ratio must be non-negative"
+            )
+
+        if not 0 <= self.clip_fraction <= 1:
+            raise ValueError(
+                "clip_fraction must be between zero and one"
+            )
+
+        if self.trainable_token_count <= 0:
+            raise ValueError(
+                "trainable_token_count must be positive"
+            )
+
+        if self.parameter_delta < 0:
+            raise ValueError(
+                "parameter_delta must be non-negative"
+            )
+
+
+@dataclass(frozen=True)
 class TrainingComparisonRow:
     """Metrics from one policy-normalization condition."""
 
@@ -100,6 +168,31 @@ class TrainingComparisonRow:
     mean_absolute_logprob_shift: float
     max_absolute_logprob_shift: float
     task_shifts: tuple[TaskLogprobShift, ...]
+    steps: tuple[TrainingComparisonStep, ...] = ()
+
+    @property
+    def resolved_steps(
+        self,
+    ) -> tuple[TrainingComparisonStep, ...]:
+        """Return explicit steps or a legacy one-step record."""
+
+        if self.steps:
+            return self.steps
+
+        return (
+            TrainingComparisonStep(
+                step_index=1,
+                loss=self.loss,
+                gradient_norm=self.gradient_norm,
+                mean_ratio=self.mean_ratio,
+                approximate_kl=self.approximate_kl,
+                clip_fraction=self.clip_fraction,
+                trainable_token_count=(
+                    self.trainable_token_count
+                ),
+                parameter_delta=self.parameter_delta,
+            ),
+        )
 
     def validate(self) -> None:
         """Validate one comparison condition."""
@@ -172,6 +265,70 @@ class TrainingComparisonRow:
                 "max_absolute_logprob_shift must not be "
                 "smaller than mean_absolute_logprob_shift"
             )
+
+        step_metrics = self.resolved_steps
+
+        expected_indices = tuple(
+            range(1, len(step_metrics) + 1)
+        )
+        actual_indices = tuple(
+            step.step_index
+            for step in step_metrics
+        )
+
+        if actual_indices != expected_indices:
+            raise ValueError(
+                "step indices must be consecutive "
+                "and start at one"
+            )
+
+        for step in step_metrics:
+            step.validate()
+
+            if (
+                step.trainable_token_count
+                != self.trainable_token_count
+            ):
+                raise ValueError(
+                    "step trainable_token_count must "
+                    "match row"
+                )
+
+        final_step = step_metrics[-1]
+
+        for metric_name, row_value, step_value in (
+            ("loss", self.loss, final_step.loss),
+            (
+                "gradient_norm",
+                self.gradient_norm,
+                final_step.gradient_norm,
+            ),
+            (
+                "mean_ratio",
+                self.mean_ratio,
+                final_step.mean_ratio,
+            ),
+            (
+                "approximate_kl",
+                self.approximate_kl,
+                final_step.approximate_kl,
+            ),
+            (
+                "clip_fraction",
+                self.clip_fraction,
+                final_step.clip_fraction,
+            ),
+            (
+                "parameter_delta",
+                self.parameter_delta,
+                final_step.parameter_delta,
+            ),
+        ):
+            if row_value != step_value:
+                raise ValueError(
+                    f"final step {metric_name} must "
+                    "match row"
+                )
 
         if not self.task_shifts:
             raise ValueError(
@@ -290,9 +447,21 @@ class TrainingComparisonSummary:
             for task in self.tasks
         )
         normalizations: set[PolicyNormalization] = set()
+        expected_step_count = len(
+            self.rows[0].resolved_steps
+        )
 
         for row in self.rows:
             row.validate()
+
+            if (
+                len(row.resolved_steps)
+                != expected_step_count
+            ):
+                raise ValueError(
+                    "all rows must contain the same "
+                    "number of steps"
+                )
 
             if row.normalization in normalizations:
                 raise ValueError(
@@ -330,7 +499,7 @@ def training_comparison_to_dict(
     summary.validate()
 
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "source": {
             "artifact": summary.source_artifact,
             "model_name": summary.model_name,
@@ -353,6 +522,9 @@ def training_comparison_to_dict(
             "clip_epsilon": summary.clip_epsilon,
             "max_gradient_norm": (
                 summary.max_gradient_norm
+            ),
+            "steps": len(
+                summary.rows[0].resolved_steps
             ),
             "trainable_parameter_names": list(
                 summary.trainable_parameter_names
@@ -379,6 +551,29 @@ def training_comparison_to_dict(
                 "max_absolute_logprob_shift": (
                     row.max_absolute_logprob_shift
                 ),
+                "steps": [
+                    {
+                        "step_index": step.step_index,
+                        "loss": step.loss,
+                        "gradient_norm": (
+                            step.gradient_norm
+                        ),
+                        "mean_ratio": step.mean_ratio,
+                        "approximate_kl": (
+                            step.approximate_kl
+                        ),
+                        "clip_fraction": (
+                            step.clip_fraction
+                        ),
+                        "trainable_token_count": (
+                            step.trainable_token_count
+                        ),
+                        "parameter_delta": (
+                            step.parameter_delta
+                        ),
+                    }
+                    for step in row.resolved_steps
+                ],
                 "task_shifts": [
                     {
                         "task_id": shift.task_id,

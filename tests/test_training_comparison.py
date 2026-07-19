@@ -9,6 +9,7 @@ import pytest
 from parity_posttrain.training.comparison import (
     TaskLogprobShift,
     TrainingComparisonRow,
+    TrainingComparisonStep,
     TrainingComparisonSummary,
     TrainingComparisonTask,
     training_comparison_to_dict,
@@ -98,7 +99,7 @@ def test_training_comparison_serializes() -> None:
         make_summary()
     )
 
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 2
 
     source = payload["source"]
     training = payload["training"]
@@ -111,7 +112,9 @@ def test_training_comparison_serializes() -> None:
     assert source["device"] == "cpu"
     assert source["dtype"] == "torch.float32"
     assert training["trainable_parameter_count"] == 896
+    assert training["steps"] == 1
     assert len(results) == 3
+    assert results[0]["steps"][0]["step_index"] == 1
     assert results[0]["normalization"] == "token"
 
     task_shifts = results[0]["task_shifts"]
@@ -172,5 +175,72 @@ def test_summary_rejects_token_count_mismatch() -> None:
     with pytest.raises(
         ValueError,
         match="does not match selected tasks",
+    ):
+        invalid.validate()
+
+
+def test_multi_step_row_serializes() -> None:
+    first_step = TrainingComparisonStep(
+        step_index=1,
+        loss=0.3,
+        gradient_norm=0.005,
+        mean_ratio=1.0,
+        approximate_kl=0.0,
+        clip_fraction=0.0,
+        trainable_token_count=89,
+        parameter_delta=2e-5,
+    )
+    final_step = TrainingComparisonStep(
+        step_index=2,
+        loss=0.2,
+        gradient_norm=0.004,
+        mean_ratio=1.0,
+        approximate_kl=0.0,
+        clip_fraction=0.0,
+        trainable_token_count=89,
+        parameter_delta=5e-5,
+    )
+    row = replace(
+        make_row(),
+        steps=(first_step, final_step),
+    )
+    summary = replace(
+        make_summary(),
+        rows=(row,),
+    )
+
+    payload = training_comparison_to_dict(summary)
+    training = payload["training"]
+    results = payload["results"]
+
+    assert isinstance(training, dict)
+    assert isinstance(results, list)
+    assert training["steps"] == 2
+    assert len(results[0]["steps"]) == 2
+    assert (
+        results[0]["steps"][1]["parameter_delta"]
+        == 5e-5
+    )
+
+
+def test_row_rejects_mismatched_final_step() -> None:
+    mismatched_step = TrainingComparisonStep(
+        step_index=1,
+        loss=0.3,
+        gradient_norm=0.004,
+        mean_ratio=1.0,
+        approximate_kl=0.0,
+        clip_fraction=0.0,
+        trainable_token_count=89,
+        parameter_delta=5e-5,
+    )
+    invalid = replace(
+        make_row(),
+        steps=(mismatched_step,),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="final step loss must match row",
     ):
         invalid.validate()

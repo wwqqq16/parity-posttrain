@@ -30,6 +30,10 @@ from parity_posttrain.training.logprobs import (
     gather_masked_causal_logprobs,
     rescore_training_batch,
 )
+from parity_posttrain.training.loop import (
+    TrainingLoopResult,
+    run_clipped_policy_training,
+)
 from parity_posttrain.training.objective import (
     ClippedPolicyLossResult,
     PolicyNormalization,
@@ -49,6 +53,7 @@ __all__ = [
     "TrainingComparisonRow",
     "TrainingComparisonSummary",
     "TrainingComparisonTask",
+    "TrainingLoopResult",
     "TrainingStepResult",
     "TrajectoryTrainingBatch",
     "TrajectoryTrainingExample",
@@ -63,6 +68,7 @@ __all__ = [
     "load_training_examples",
     "rescore_training_batch",
     "run_clipped_policy_step",
+    "run_clipped_policy_training",
     "run_training_comparison",
     "select_training_examples",
     "training_comparison_to_dict",

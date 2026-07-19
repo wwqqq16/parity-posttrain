@@ -26,6 +26,7 @@ class ClippedPolicyLossResult:
     mean_ratio: float
     approximate_kl: float
     clip_fraction: float
+    active_clip_fraction: float
     trainable_token_count: int
 
 
@@ -278,9 +279,19 @@ def clipped_policy_loss(
         (ratio - 1.0) - log_ratio
     ).detach().mean()
 
-    clipped_tokens = (
+    out_of_range_tokens = (
         (ratio < 1.0 - clip_epsilon)
         | (ratio > 1.0 + clip_epsilon)
+    )
+    active_clipped_tokens = (
+        (
+            (token_advantages > 0)
+            & (ratio > 1.0 + clip_epsilon)
+        )
+        | (
+            (token_advantages < 0)
+            & (ratio < 1.0 - clip_epsilon)
+        )
     )
 
     return ClippedPolicyLossResult(
@@ -292,7 +303,10 @@ def clipped_policy_loss(
             approximate_kl.item()
         ),
         clip_fraction=float(
-            clipped_tokens.float().mean().item()
+            out_of_range_tokens.float().mean().item()
+        ),
+        active_clip_fraction=float(
+            active_clipped_tokens.float().mean().item()
         ),
         trainable_token_count=trainable_token_count,
     )

@@ -30,6 +30,7 @@ class TrainingStepResult:
     trainable_token_count: int
     gradient_norm: float
     normalization: PolicyNormalization
+    active_clip_fraction: float = 0.0
 
 
 def run_clipped_policy_step(
@@ -98,6 +99,9 @@ def run_clipped_policy_step(
         mean_ratio=objective.mean_ratio,
         approximate_kl=objective.approximate_kl,
         clip_fraction=objective.clip_fraction,
+        active_clip_fraction=(
+            objective.active_clip_fraction
+        ),
         trainable_token_count=(
             objective.trainable_token_count
         ),

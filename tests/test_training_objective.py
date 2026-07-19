@@ -81,6 +81,7 @@ def test_clipped_policy_loss_is_differentiable() -> None:
     )
     assert result.mean_ratio == pytest.approx(1.0)
     assert result.clip_fraction == 0.0
+    assert result.active_clip_fraction == 0.0
     assert result.trainable_token_count == 2
     assert result.approximate_kl >= 0.0
 
@@ -109,7 +110,42 @@ def test_clipped_policy_loss_clips_ratios() -> None:
         -0.1
     )
     assert result.clip_fraction == 1.0
+    assert result.active_clip_fraction == 1.0
     assert result.trainable_token_count == 2
+
+
+def test_distinguishes_out_of_range_from_active_clipping(
+) -> None:
+    batch = make_batch()
+    trainer_logprobs = torch.zeros_like(
+        batch.rollout_logprobs
+    )
+
+    # Positive advantage with a low ratio is outside the
+    # interval, but PPO still uses the unclipped objective.
+    trainer_logprobs[0, 1] = math.log(0.5)
+
+    # Negative advantage with a high ratio is also outside
+    # the interval, but PPO still uses the unclipped objective.
+    trainer_logprobs[1, 1] = math.log(1.5)
+    trainer_logprobs.requires_grad_()
+
+    result = clipped_policy_loss(
+        trainer_logprobs=trainer_logprobs,
+        batch=batch,
+        clip_epsilon=0.2,
+    )
+
+    assert result.clip_fraction == 1.0
+    assert result.active_clip_fraction == 0.0
+
+    result.loss.backward()
+
+    gradients = trainer_logprobs.grad
+
+    assert gradients is not None
+    assert gradients[0, 1].item() < 0.0
+    assert gradients[1, 1].item() > 0.0
 
 
 def test_clipped_policy_loss_rejects_shape() -> None:

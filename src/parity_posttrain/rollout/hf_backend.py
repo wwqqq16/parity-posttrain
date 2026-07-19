@@ -185,6 +185,37 @@ class HuggingFaceRolloutBackend:
                 ),
             )
 
+        resolved_revision = getattr(
+            getattr(
+                loaded_model,
+                "config",
+                None,
+            ),
+            "_commit_hash",
+            None,
+        )
+
+        if (
+            not isinstance(resolved_revision, str)
+            or not resolved_revision.strip()
+        ):
+            resolved_revision = getattr(
+                getattr(
+                    loaded_model,
+                    "generation_config",
+                    None,
+                ),
+                "_commit_hash",
+                None,
+            )
+
+        self.resolved_model_revision = (
+            resolved_revision.strip()
+            if isinstance(resolved_revision, str)
+            and resolved_revision.strip()
+            else None
+        )
+
         loaded_model.to(self.device)
         loaded_model.eval()
         self.model = loaded_model

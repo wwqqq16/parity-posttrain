@@ -21,6 +21,12 @@ class FakeLoadedModel:
         calls: dict[str, object],
     ) -> None:
         self.calls = calls
+        self.config = SimpleNamespace(
+            _commit_hash="c" * 40,
+        )
+        self.generation_config = SimpleNamespace(
+            _commit_hash="d" * 40,
+        )
 
     def to(
         self,
@@ -82,6 +88,9 @@ def test_backend_passes_revision_to_both_loaders(
 
     assert backend.model_name == "test-model"
     assert backend.model_revision == "revision-123"
+    assert backend.resolved_model_revision == (
+        "c" * 40
+    )
     assert calls["tokenizer_kwargs"] == {
         "revision": "revision-123",
     }

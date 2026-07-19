@@ -15,6 +15,7 @@ from parity_posttrain.provenance import (
     ExperimentProvenance,
     build_experiment_provenance,
     resolve_git_commit,
+    resolve_git_dirty,
     set_experiment_seed,
     sha256_file,
 )
@@ -168,6 +169,7 @@ def test_build_experiment_provenance(
     payload = result.to_dict()
 
     assert result.git_commit is None
+    assert result.git_dirty is None
     assert result.source_artifact_sha256 == (
         sha256_file(artifact)
     )
@@ -181,6 +183,7 @@ def test_build_experiment_provenance(
     assert result.python_version
     assert result.platform
 
+    assert payload["git_dirty"] is None
     assert payload["model_name"] == "test-model"
     assert payload[
         "requested_model_revision"
@@ -233,5 +236,96 @@ def test_provenance_rejects_invalid_resolved_revision(
     with pytest.raises(
         ValueError,
         match="hexadecimal commit ID",
+    ):
+        result.validate()
+
+
+def test_resolve_git_dirty_detects_clean_and_dirty(
+    tmp_path: Path,
+) -> None:
+    subprocess.run(
+        ["git", "init", "-q"],
+        cwd=tmp_path,
+        check=True,
+    )
+    subprocess.run(
+        [
+            "git",
+            "config",
+            "user.email",
+            "test@example.com",
+        ],
+        cwd=tmp_path,
+        check=True,
+    )
+    subprocess.run(
+        [
+            "git",
+            "config",
+            "user.name",
+            "Test User",
+        ],
+        cwd=tmp_path,
+        check=True,
+    )
+
+    tracked = tmp_path / "tracked.txt"
+    tracked.write_text(
+        "initial\n",
+        encoding="utf-8",
+    )
+
+    subprocess.run(
+        ["git", "add", "tracked.txt"],
+        cwd=tmp_path,
+        check=True,
+    )
+    subprocess.run(
+        [
+            "git",
+            "commit",
+            "-q",
+            "-m",
+            "initial",
+        ],
+        cwd=tmp_path,
+        check=True,
+    )
+
+    assert resolve_git_dirty(tmp_path) is False
+
+    tracked.write_text(
+        "modified\n",
+        encoding="utf-8",
+    )
+
+    assert resolve_git_dirty(tmp_path) is True
+
+
+def test_resolve_git_dirty_returns_none_outside_repo(
+    tmp_path: Path,
+) -> None:
+    assert resolve_git_dirty(tmp_path) is None
+
+
+def test_provenance_rejects_invalid_git_dirty(
+) -> None:
+    result = ExperimentProvenance(
+        git_commit=None,
+        source_artifact_sha256="a" * 64,
+        python_version="3.12.0",
+        platform="test-platform",
+        pytorch_version="2.0.0",
+        transformers_version="5.0.0",
+        model_name="test-model",
+        requested_model_revision=None,
+        resolved_model_revision=None,
+        seed=0,
+        git_dirty="yes",  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="boolean or None",
     ):
         result.validate()

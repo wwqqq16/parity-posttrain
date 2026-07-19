@@ -33,6 +33,7 @@ class ExperimentProvenance:
     requested_model_revision: str | None
     resolved_model_revision: str | None
     seed: int
+    git_dirty: bool | None = None
 
     @property
     def model_revision(self) -> str | None:
@@ -41,6 +42,17 @@ class ExperimentProvenance:
         return self.requested_model_revision
 
     def validate(self) -> None:
+        if (
+            self.git_dirty is not None
+            and not isinstance(
+                self.git_dirty,
+                bool,
+            )
+        ):
+            raise ValueError(
+                "git_dirty must be a boolean or None"
+            )
+
         """Validate provenance fields."""
 
         if (
@@ -130,6 +142,7 @@ class ExperimentProvenance:
 
         return {
             "git_commit": self.git_commit,
+            "git_dirty": self.git_dirty,
             "source_artifact_sha256": (
                 self.source_artifact_sha256
             ),
@@ -207,6 +220,39 @@ def resolve_git_commit(
     return commit
 
 
+def resolve_git_dirty(
+    start_path: Path | None = None,
+) -> bool | None:
+    """Return whether the Git worktree has changes."""
+
+    working_directory = (
+        start_path
+        if start_path is not None
+        else Path.cwd()
+    )
+
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "status",
+                "--porcelain=v1",
+                "--untracked-files=normal",
+            ],
+            cwd=working_directory,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (
+        OSError,
+        subprocess.CalledProcessError,
+    ):
+        return None
+
+    return bool(result.stdout.strip())
+
+
 def installed_package_version(
     distribution_name: str,
 ) -> str | None:
@@ -262,6 +308,9 @@ def build_experiment_provenance(
 
     provenance = ExperimentProvenance(
         git_commit=resolve_git_commit(
+            repository_path
+        ),
+        git_dirty=resolve_git_dirty(
             repository_path
         ),
         source_artifact_sha256=sha256_file(

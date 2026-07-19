@@ -309,7 +309,7 @@ def main(
         parameter_selection.restore_requires_grad()
 
     payload = {
-        "schema_version": 3,
+        "schema_version": 4,
         "source_artifact": str(args.artifact),
         "provenance": provenance.to_dict(),
         "model_name": model_name,

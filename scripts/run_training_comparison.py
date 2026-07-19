@@ -235,7 +235,7 @@ def main(
     payload = training_comparison_to_dict(
         summary
     )
-    payload["schema_version"] = 4
+    payload["schema_version"] = 5
     payload["provenance"] = provenance.to_dict()
 
     args.output.parent.mkdir(

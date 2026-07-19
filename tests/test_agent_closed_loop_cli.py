@@ -131,6 +131,7 @@ def test_main_writes_closed_loop_artifact(
         def to_dict(self) -> dict[str, object]:
             return {
                 "git_commit": "a" * 40,
+                "git_dirty": False,
                 "source_artifact_sha256": "b" * 64,
                 "model_name": "tiny-model",
                 "requested_model_revision": "revision-123",
@@ -190,8 +191,9 @@ def test_main_writes_closed_loop_artifact(
         output.read_text(encoding="utf-8")
     )
 
-    assert payload["schema_version"] == 5
+    assert payload["schema_version"] == 6
     assert payload["provenance"]["seed"] == 17
+    assert payload["provenance"]["git_dirty"] is False
     assert payload["provenance"][
         "requested_model_revision"
     ] == "revision-123"

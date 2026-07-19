@@ -276,7 +276,7 @@ def main(
     payload = closed_loop_summary_to_dict(
         summary
     )
-    payload["schema_version"] = 5
+    payload["schema_version"] = 6
     payload["provenance"] = provenance.to_dict()
     payload["experiment"] = {
         "device": str(backend.device),

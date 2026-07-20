@@ -127,7 +127,25 @@ def main(
     payload = controlled_parity_summary_to_dict(
         summary
     )
+
+    failed_condition_slugs = [
+        run.condition.slug
+        for run, row in zip(
+            runs,
+            summary.rows,
+            strict=True,
+        )
+        if not row.within_tolerance
+    ]
+
     payload["schema_version"] = 1
+    payload["overall_passed"] = all(
+        row.within_tolerance
+        for row in summary.rows
+    )
+    payload["failed_condition_slugs"] = (
+        failed_condition_slugs
+    )
     payload["matrix"] = {
         "include_mps": args.include_mps,
         "condition_count": len(runs),

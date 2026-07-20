@@ -43,9 +43,27 @@ def load_script_module() -> ModuleType:
     return module
 
 
+@pytest.mark.parametrize(
+    (
+        "uncached_passed",
+        "expected_overall",
+        "expected_failed_slugs",
+    ),
+    [
+        (True, True, []),
+        (
+            False,
+            False,
+            ["cpu_no_cache"],
+        ),
+    ],
+)
 def test_main_runs_and_writes_summary(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    uncached_passed: bool,
+    expected_overall: bool,
+    expected_failed_slugs: list[str],
 ) -> None:
     module = load_script_module()
 
@@ -131,8 +149,10 @@ def test_main_runs_and_writes_summary(
             latency_ms=20.0,
             mean_absolute_error=3e-6,
             max_absolute_error=4e-6,
-            tokens_over_tolerance=0,
-            within_tolerance=True,
+            tokens_over_tolerance=(
+                0 if uncached_passed else 1
+            ),
+            within_tolerance=uncached_passed,
         ),
     )
 
@@ -201,6 +221,13 @@ def test_main_runs_and_writes_summary(
     )
 
     assert payload["schema_version"] == 1
+    assert (
+        payload["overall_passed"]
+        is expected_overall
+    )
+    assert payload["failed_condition_slugs"] == (
+        expected_failed_slugs
+    )
     assert payload["matrix"]["include_mps"] is False
     assert payload["matrix"]["condition_count"] == 2
 

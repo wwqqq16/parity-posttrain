@@ -101,7 +101,7 @@ def load_controlled_payload(
 
 def main(
     argv: Sequence[str] | None = None,
-) -> None:
+) -> int:
     """Run the matrix and write a unified summary."""
 
     args = parse_args(argv)
@@ -138,11 +138,13 @@ def main(
         if not row.within_tolerance
     ]
 
-    payload["schema_version"] = 1
-    payload["overall_passed"] = all(
+    overall_passed = all(
         row.within_tolerance
         for row in summary.rows
     )
+
+    payload["schema_version"] = 1
+    payload["overall_passed"] = overall_passed
     payload["failed_condition_slugs"] = (
         failed_condition_slugs
     )
@@ -208,6 +210,8 @@ def main(
     print()
     print("Output:", args.output)
 
+    return 0 if overall_passed else 1
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

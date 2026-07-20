@@ -198,7 +198,7 @@ def test_main_runs_and_writes_summary(
 
     output = tmp_path / "summary.json"
 
-    module.main(
+    exit_code = module.main(
         [
             "--artifact",
             "artifacts/agent_benchmark.json",
@@ -220,6 +220,9 @@ def test_main_runs_and_writes_summary(
         output.read_text(encoding="utf-8")
     )
 
+    assert exit_code == (
+        0 if expected_overall else 1
+    )
     assert payload["schema_version"] == 1
     assert (
         payload["overall_passed"]

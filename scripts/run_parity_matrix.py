@@ -221,6 +221,33 @@ def validate_matrix_provenance(
     return reference
 
 
+def validate_known_mismatch_slugs(
+    declared_slugs: Sequence[str],
+    *,
+    available_slugs: Sequence[str],
+) -> list[str]:
+    """Validate and deduplicate known mismatch slugs."""
+
+    unique_declared_slugs = list(
+        dict.fromkeys(declared_slugs)
+    )
+    available_slug_set = set(available_slugs)
+    unknown_slugs = [
+        slug
+        for slug in unique_declared_slugs
+        if slug not in available_slug_set
+    ]
+
+    if unknown_slugs:
+        joined_slugs = ", ".join(unknown_slugs)
+        raise ValueError(
+            "unknown known-mismatch condition "
+            f"slug(s): {joined_slugs}"
+        )
+
+    return unique_declared_slugs
+
+
 def main(
     argv: Sequence[str] | None = None,
 ) -> int:
@@ -275,11 +302,18 @@ def main(
         if not row.within_tolerance
     ]
 
-    known_mismatch_slugs = set(
-        args.known_mismatch
+    condition_slugs = [
+        run.condition.slug
+        for run in runs
+    ]
+    declared_known_mismatch_slugs = (
+        validate_known_mismatch_slugs(
+            args.known_mismatch,
+            available_slugs=condition_slugs,
+        )
     )
-    declared_known_mismatch_slugs = list(
-        dict.fromkeys(args.known_mismatch)
+    known_mismatch_slugs = set(
+        declared_known_mismatch_slugs
     )
     known_failed_condition_slugs = [
         slug

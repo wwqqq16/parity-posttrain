@@ -378,6 +378,48 @@ def test_main_runs_and_writes_summary(
     ]
 
 
+def test_validate_known_mismatch_slugs_deduplicates(
+) -> None:
+    module = load_script_module()
+
+    assert module.validate_known_mismatch_slugs(
+        [
+            "mps_cache",
+            "mps_cache",
+            "cpu_cache",
+        ],
+        available_slugs=[
+            "cpu_cache",
+            "mps_cache",
+        ],
+    ) == [
+        "mps_cache",
+        "cpu_cache",
+    ]
+
+
+def test_validate_known_mismatch_slugs_rejects_unknown(
+) -> None:
+    module = load_script_module()
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "unknown known-mismatch condition "
+            "slug.*mps-fp16-cache"
+        ),
+    ):
+        module.validate_known_mismatch_slugs(
+            ["mps-fp16-cache"],
+            available_slugs=[
+                "cpu_cache",
+                "cpu_no_cache",
+                "mps_cache",
+                "mps_no_cache",
+            ],
+        )
+
+
 def test_validate_matrix_provenance_rejects_different_runs(
 ) -> None:
     module = load_script_module()

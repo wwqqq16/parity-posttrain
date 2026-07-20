@@ -89,6 +89,17 @@ def load_script_module() -> ModuleType:
             [],
             0,
         ),
+        (
+            True,
+            ["cpu_no_cache"],
+            True,
+            True,
+            [],
+            [],
+            ["cpu_no_cache"],
+            [],
+            0,
+        ),
     ],
 )
 def test_main_runs_and_writes_summary(

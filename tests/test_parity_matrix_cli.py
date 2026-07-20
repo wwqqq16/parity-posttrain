@@ -250,6 +250,10 @@ def test_main_runs_and_writes_summary(
             "0",
             "--tolerance",
             "0.001",
+            "--seed",
+            "17",
+            "--model-revision",
+            "revision-test",
             "--no-include-mps",
             "--output-directory",
             str(condition_directory),
@@ -300,6 +304,11 @@ def test_main_runs_and_writes_summary(
     assert runner_kwargs["task_id"] == "basket_001"
     assert runner_kwargs["turn_index"] == 0
     assert runner_kwargs["tolerance"] == 1e-3
+    assert runner_kwargs["seed"] == 17
+    assert (
+        runner_kwargs["model_revision"]
+        == "revision-test"
+    )
     assert runner_kwargs["include_mps"] is False
 
     assert calls["payloads"] == [

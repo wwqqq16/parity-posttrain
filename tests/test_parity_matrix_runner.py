@@ -66,6 +66,8 @@ def test_runner_executes_four_conditions(
         turn_index=0,
         tolerance=1e-3,
         output_directory=tmp_path / "matrix",
+        seed=17,
+        model_revision="revision-test",
         python_executable="python-test",
     )
 
@@ -87,6 +89,18 @@ def test_runner_executes_four_conditions(
             "python-test",
             "scripts/run_controlled_parity.py",
         )
+        for command in commands
+    )
+    assert all(
+        command[
+            command.index("--seed") + 1
+        ] == "17"
+        for command in commands
+    )
+    assert all(
+        command[
+            command.index("--model-revision") + 1
+        ] == "revision-test"
         for command in commands
     )
 
@@ -160,6 +174,16 @@ def test_runner_can_skip_mps(
     assert len(commands) == 2
     assert all(
         "mps" not in command
+        for command in commands
+    )
+    assert all(
+        command[
+            command.index("--seed") + 1
+        ] == "0"
+        for command in commands
+    )
+    assert all(
+        "--model-revision" not in command
         for command in commands
     )
 

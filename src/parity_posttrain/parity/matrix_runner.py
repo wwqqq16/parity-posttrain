@@ -29,6 +29,8 @@ def run_controlled_parity_matrix(
     turn_index: int,
     tolerance: float,
     output_directory: Path,
+    seed: int = 0,
+    model_revision: str | None = None,
     include_mps: bool = True,
     script_path: Path = Path(
         "scripts/run_controlled_parity.py"
@@ -51,6 +53,19 @@ def run_controlled_parity_matrix(
         ControlledParityMatrixRun
     ] = []
 
+    provenance_arguments = [
+        "--seed",
+        str(seed),
+    ]
+
+    if model_revision is not None:
+        provenance_arguments.extend(
+            [
+                "--model-revision",
+                model_revision,
+            ]
+        )
+
     for condition in build_controlled_parity_matrix(
         include_mps=include_mps
     ):
@@ -70,6 +85,7 @@ def run_controlled_parity_matrix(
             python_executable,
             str(script_path),
             *arguments,
+            *provenance_arguments,
         )
 
         subprocess.run(

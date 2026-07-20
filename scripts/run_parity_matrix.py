@@ -78,6 +78,20 @@ def parse_args(
         help="Path for the unified matrix summary.",
     )
     parser.add_argument(
+        "--seed",
+        type=int,
+        default=0,
+        help="Random seed shared by all matrix runs.",
+    )
+    parser.add_argument(
+        "--model-revision",
+        default=None,
+        help=(
+            "Optional Hugging Face branch, tag, "
+            "or commit shared by all matrix runs."
+        ),
+    )
+    parser.add_argument(
         "--known-mismatch",
         action="append",
         default=[],
@@ -122,6 +136,8 @@ def main(
         turn_index=args.turn_index,
         tolerance=args.tolerance,
         output_directory=args.output_directory,
+        seed=args.seed,
+        model_revision=args.model_revision,
         include_mps=args.include_mps,
     )
 

@@ -196,6 +196,10 @@ def main(
         unexpected_failed_condition_slugs
     )
     payload["matrix"] = {
+        "seed": args.seed,
+        "requested_model_revision": (
+            args.model_revision
+        ),
         "include_mps": args.include_mps,
         "condition_count": len(runs),
         "conditions": [

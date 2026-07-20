@@ -286,6 +286,13 @@ def test_main_runs_and_writes_summary(
     assert payload[
         "unexpected_failed_condition_slugs"
     ] == expected_unexpected_failed_slugs
+    assert payload["matrix"]["seed"] == 17
+    assert (
+        payload["matrix"][
+            "requested_model_revision"
+        ]
+        == "revision-test"
+    )
     assert payload["matrix"]["include_mps"] is False
     assert payload["matrix"]["condition_count"] == 2
 

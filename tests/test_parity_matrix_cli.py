@@ -401,6 +401,45 @@ def test_main_runs_and_writes_summary(
     ]
 
 
+def test_main_rejects_unknown_mismatch_before_runner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = load_script_module()
+    runner_called = False
+
+    def fake_runner(
+        **kwargs: Any,
+    ) -> tuple[ControlledParityMatrixRun, ...]:
+        nonlocal runner_called
+        runner_called = True
+
+        return ()
+
+    monkeypatch.setattr(
+        module,
+        "run_controlled_parity_matrix",
+        fake_runner,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="mps-fp16-cache",
+    ):
+        module.main(
+            [
+                "--artifact",
+                "artifacts/agent_benchmark.json",
+                "--task-id",
+                "basket_001",
+                "--no-include-mps",
+                "--known-mismatch",
+                "mps-fp16-cache",
+            ]
+        )
+
+    assert runner_called is False
+
+
 def test_validate_known_mismatch_slugs_deduplicates(
 ) -> None:
     module = load_script_module()

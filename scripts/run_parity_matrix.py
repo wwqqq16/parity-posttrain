@@ -12,6 +12,9 @@ from parity_posttrain.parity.controlled_summary import (
     build_controlled_parity_summary,
     controlled_parity_summary_to_dict,
 )
+from parity_posttrain.parity.matrix import (
+    build_controlled_parity_matrix,
+)
 from parity_posttrain.parity.matrix_runner import (
     run_controlled_parity_matrix,
 )
@@ -255,6 +258,21 @@ def main(
 
     args = parse_args(argv)
 
+    planned_conditions = (
+        build_controlled_parity_matrix(
+            include_mps=args.include_mps,
+        )
+    )
+    declared_known_mismatch_slugs = (
+        validate_known_mismatch_slugs(
+            args.known_mismatch,
+            available_slugs=[
+                condition.slug
+                for condition in planned_conditions
+            ],
+        )
+    )
+
     runs = run_controlled_parity_matrix(
         artifact=args.artifact,
         task_id=args.task_id,
@@ -302,16 +320,6 @@ def main(
         if not row.within_tolerance
     ]
 
-    condition_slugs = [
-        run.condition.slug
-        for run in runs
-    ]
-    declared_known_mismatch_slugs = (
-        validate_known_mismatch_slugs(
-            args.known_mismatch,
-            available_slugs=condition_slugs,
-        )
-    )
     known_mismatch_slugs = set(
         declared_known_mismatch_slugs
     )

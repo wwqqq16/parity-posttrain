@@ -1,5 +1,7 @@
 # ParityPostTrain
 
+[![CI](https://github.com/wwqqq16/parity-posttrain/actions/workflows/ci.yml/badge.svg)](https://github.com/wwqqq16/parity-posttrain/actions/workflows/ci.yml)
+
 ParityPostTrain is a small, reproducible research-engineering system for
 studying consistency between agentic LLM rollout and post-training
 execution paths.
@@ -309,6 +311,49 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[dev,ml]"
 ~~~
 
+## Reproducible Parity Result
+
+A controlled replay of `basket_001`, turn 0, compares rollout
+log-probabilities against trainer-side teacher-forced rescoring for
+the same 63 generated tokens.
+
+| Condition | Maximum absolute error | Result |
+| --- | ---: | --- |
+| CPU FP32, KV cache enabled | `5.57e-05` | Pass |
+| CPU FP32, KV cache disabled | `2.38e-05` | Pass |
+| MPS FP16, KV cache enabled | `3.31e-02` | Known mismatch |
+| MPS FP16, KV cache disabled | `3.87e-07` | Pass |
+
+At a tolerance of `1e-3`, the MPS FP16 cached path produced 13
+failing tokens. Disabling KV cache reduced the maximum error by
+approximately five orders of magnitude.
+
+This isolates the observed drift to the MPS FP16 cached
+incremental-decoding path rather than general FP16 numerical noise.
+
+The experiment uses the pinned Hugging Face model revision:
+
+~~~text
+7ae557604adf67be50417f59c2c2f167def9a775
+~~~
+
+## Regression Contract
+
+The controlled parity matrix distinguishes raw numerical parity from
+regression status:
+
+- `overall_passed` is true only when every condition passes;
+- `regression_passed` allows explicitly declared known mismatches;
+- unexpected failures produce a nonzero CLI exit code;
+- resolved known mismatches are reported so stale allowlist entries
+  can be removed;
+- seed, requested and resolved model revisions, source hashes, and Git
+  state are recorded as experiment provenance.
+
+GitHub Actions runs a pinned CPU cache/no-cache parity matrix against
+the committed `basket_001` fixture and uploads the resulting JSON
+artifacts for diagnosis.
+
 ## Quality Checks
 
 ~~~bash
@@ -317,7 +362,7 @@ python -m ruff check .
 python -m mypy
 ~~~
 
-The current test suite contains 183 tests.
+The current test suite contains 222 tests.
 
 ## Generated Artifacts
 
@@ -333,7 +378,11 @@ The artifact directory itself is retained through
 
 The current project demonstrates:
 
-- exact token-level parity measurement;
+- exact token-level rollout--trainer parity measurement;
+- controlled replay across device, precision, and KV-cache settings;
+- pinned model revisions and validated experiment provenance;
+- matrix-level regression contracts and known-mismatch reporting;
+- a committed CPU parity fixture exercised in GitHub Actions;
 - real agent trajectory extraction;
 - batched trainer-side rescoring;
 - differentiable clipped policy optimization;

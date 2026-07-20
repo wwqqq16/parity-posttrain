@@ -51,6 +51,7 @@ def load_script_module() -> ModuleType:
         "expected_regression",
         "expected_failed_slugs",
         "expected_known_failed_slugs",
+        "expected_resolved_known_slugs",
         "expected_unexpected_failed_slugs",
         "expected_exit_code",
     ),
@@ -63,6 +64,7 @@ def load_script_module() -> ModuleType:
             [],
             [],
             [],
+            [],
             0,
         ),
         (
@@ -71,6 +73,7 @@ def load_script_module() -> ModuleType:
             False,
             False,
             ["cpu_no_cache"],
+            [],
             [],
             ["cpu_no_cache"],
             1,
@@ -82,6 +85,7 @@ def load_script_module() -> ModuleType:
             True,
             ["cpu_no_cache"],
             ["cpu_no_cache"],
+            [],
             [],
             0,
         ),
@@ -96,6 +100,7 @@ def test_main_runs_and_writes_summary(
     expected_regression: bool,
     expected_failed_slugs: list[str],
     expected_known_failed_slugs: list[str],
+    expected_resolved_known_slugs: list[str],
     expected_unexpected_failed_slugs: list[str],
     expected_exit_code: int,
 ) -> None:
@@ -300,9 +305,15 @@ def test_main_runs_and_writes_summary(
     assert payload["failed_condition_slugs"] == (
         expected_failed_slugs
     )
+    assert payload["known_mismatch_slugs"] == (
+        known_mismatches
+    )
     assert payload[
         "known_failed_condition_slugs"
     ] == expected_known_failed_slugs
+    assert payload[
+        "resolved_known_mismatch_slugs"
+    ] == expected_resolved_known_slugs
     assert payload[
         "unexpected_failed_condition_slugs"
     ] == expected_unexpected_failed_slugs

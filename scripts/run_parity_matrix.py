@@ -278,10 +278,18 @@ def main(
     known_mismatch_slugs = set(
         args.known_mismatch
     )
+    declared_known_mismatch_slugs = list(
+        dict.fromkeys(args.known_mismatch)
+    )
     known_failed_condition_slugs = [
         slug
-        for slug in failed_condition_slugs
-        if slug in known_mismatch_slugs
+        for slug in declared_known_mismatch_slugs
+        if slug in failed_condition_slugs
+    ]
+    resolved_known_mismatch_slugs = [
+        slug
+        for slug in declared_known_mismatch_slugs
+        if slug not in failed_condition_slugs
     ]
     unexpected_failed_condition_slugs = [
         slug
@@ -300,8 +308,14 @@ def main(
     payload["failed_condition_slugs"] = (
         failed_condition_slugs
     )
+    payload["known_mismatch_slugs"] = (
+        declared_known_mismatch_slugs
+    )
     payload["known_failed_condition_slugs"] = (
         known_failed_condition_slugs
+    )
+    payload["resolved_known_mismatch_slugs"] = (
+        resolved_known_mismatch_slugs
     )
     payload["unexpected_failed_condition_slugs"] = (
         unexpected_failed_condition_slugs

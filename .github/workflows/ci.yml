@@ -44,3 +44,51 @@ jobs:
 
       - name: Run Mypy
         run: python -m mypy
+
+  parity-smoke:
+    name: CPU parity smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      MODEL_REVISION: >-
+        7ae557604adf67be50417f59c2c2f167def9a775
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install dependencies
+        run: python -m pip install -e ".[ml]"
+
+      - name: Run pinned CPU parity matrix
+        run: |
+          python scripts/run_parity_matrix.py \
+            --artifact tests/fixtures/parity/basket_001_turn_0.json \
+            --task-id basket_001 \
+            --turn-index 0 \
+            --tolerance 0.001 \
+            --seed 0 \
+            --model-revision "$MODEL_REVISION" \
+            --no-include-mps \
+            --output-directory artifacts/ci/parity_matrix/conditions \
+            --output artifacts/ci/parity_matrix/summary.json
+
+      - name: Upload parity artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpu-parity-matrix
+          path: artifacts/ci/parity_matrix
+          if-no-files-found: warn
+          retention-days: 7

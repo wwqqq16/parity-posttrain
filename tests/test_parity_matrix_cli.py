@@ -46,15 +46,44 @@ def load_script_module() -> ModuleType:
 @pytest.mark.parametrize(
     (
         "uncached_passed",
+        "known_mismatches",
         "expected_overall",
+        "expected_regression",
         "expected_failed_slugs",
+        "expected_known_failed_slugs",
+        "expected_unexpected_failed_slugs",
+        "expected_exit_code",
     ),
     [
-        (True, True, []),
         (
+            True,
+            [],
+            True,
+            True,
+            [],
+            [],
+            [],
+            0,
+        ),
+        (
+            False,
+            [],
             False,
             False,
             ["cpu_no_cache"],
+            [],
+            ["cpu_no_cache"],
+            1,
+        ),
+        (
+            False,
+            ["cpu_no_cache"],
+            False,
+            True,
+            ["cpu_no_cache"],
+            ["cpu_no_cache"],
+            [],
+            0,
         ),
     ],
 )
@@ -62,8 +91,13 @@ def test_main_runs_and_writes_summary(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     uncached_passed: bool,
+    known_mismatches: list[str],
     expected_overall: bool,
+    expected_regression: bool,
     expected_failed_slugs: list[str],
+    expected_known_failed_slugs: list[str],
+    expected_unexpected_failed_slugs: list[str],
+    expected_exit_code: int,
 ) -> None:
     module = load_script_module()
 
@@ -197,6 +231,14 @@ def test_main_runs_and_writes_summary(
     )
 
     output = tmp_path / "summary.json"
+    known_mismatch_args = [
+        argument
+        for slug in known_mismatches
+        for argument in (
+            "--known-mismatch",
+            slug,
+        )
+    ]
 
     exit_code = module.main(
         [
@@ -211,6 +253,7 @@ def test_main_runs_and_writes_summary(
             "--no-include-mps",
             "--output-directory",
             str(condition_directory),
+            *known_mismatch_args,
             "--output",
             str(output),
         ]
@@ -220,17 +263,25 @@ def test_main_runs_and_writes_summary(
         output.read_text(encoding="utf-8")
     )
 
-    assert exit_code == (
-        0 if expected_overall else 1
-    )
+    assert exit_code == expected_exit_code
     assert payload["schema_version"] == 1
     assert (
         payload["overall_passed"]
         is expected_overall
     )
+    assert (
+        payload["regression_passed"]
+        is expected_regression
+    )
     assert payload["failed_condition_slugs"] == (
         expected_failed_slugs
     )
+    assert payload[
+        "known_failed_condition_slugs"
+    ] == expected_known_failed_slugs
+    assert payload[
+        "unexpected_failed_condition_slugs"
+    ] == expected_unexpected_failed_slugs
     assert payload["matrix"]["include_mps"] is False
     assert payload["matrix"]["condition_count"] == 2
 

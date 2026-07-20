@@ -77,6 +77,16 @@ def parse_args(
         ),
         help="Path for the unified matrix summary.",
     )
+    parser.add_argument(
+        "--known-mismatch",
+        action="append",
+        default=[],
+        metavar="CONDITION_SLUG",
+        help=(
+            "Condition allowed to fail without causing "
+            "a regression exit code. May be repeated."
+        ),
+    )
 
     return parser.parse_args(argv)
 
@@ -138,15 +148,36 @@ def main(
         if not row.within_tolerance
     ]
 
-    overall_passed = all(
-        row.within_tolerance
-        for row in summary.rows
+    known_mismatch_slugs = set(
+        args.known_mismatch
+    )
+    known_failed_condition_slugs = [
+        slug
+        for slug in failed_condition_slugs
+        if slug in known_mismatch_slugs
+    ]
+    unexpected_failed_condition_slugs = [
+        slug
+        for slug in failed_condition_slugs
+        if slug not in known_mismatch_slugs
+    ]
+
+    overall_passed = not failed_condition_slugs
+    regression_passed = (
+        not unexpected_failed_condition_slugs
     )
 
     payload["schema_version"] = 1
     payload["overall_passed"] = overall_passed
+    payload["regression_passed"] = regression_passed
     payload["failed_condition_slugs"] = (
         failed_condition_slugs
+    )
+    payload["known_failed_condition_slugs"] = (
+        known_failed_condition_slugs
+    )
+    payload["unexpected_failed_condition_slugs"] = (
+        unexpected_failed_condition_slugs
     )
     payload["matrix"] = {
         "include_mps": args.include_mps,
@@ -210,7 +241,7 @@ def main(
     print()
     print("Output:", args.output)
 
-    return 0 if overall_passed else 1
+    return 0 if regression_passed else 1
 
 
 if __name__ == "__main__":

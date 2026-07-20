@@ -16,6 +16,10 @@ from parity_posttrain.parity.logprob_parity import (
     build_parity_report,
     rescore_generated_tokens,
 )
+from parity_posttrain.provenance import (
+    build_experiment_provenance,
+    set_experiment_seed,
+)
 from parity_posttrain.rollout.hf_backend import (
     HuggingFaceRolloutBackend,
 )
@@ -66,6 +70,21 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         required=True,
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=0,
+        help="Random seed for the controlled run.",
+    )
+    parser.add_argument(
+        "--model-revision",
+        default=None,
+        help=(
+            "Optional Hugging Face branch, tag, "
+            "or commit to load."
+        ),
+    )
+
     return parser.parse_args()
 
 
@@ -117,6 +136,8 @@ def main() -> None:
 
     args = parse_args()
 
+    set_experiment_seed(args.seed)
+
     payload = cast(
         dict[str, Any],
         json.loads(args.artifact.read_text()),
@@ -143,6 +164,19 @@ def main() -> None:
     backend = HuggingFaceRolloutBackend(
         model_name=model_name,
         device=torch.device(args.device),
+        revision=args.model_revision,
+    )
+
+    provenance = build_experiment_provenance(
+        source_artifact=args.artifact,
+        model_name=backend.model_name,
+        requested_model_revision=(
+            backend.model_revision
+        ),
+        resolved_model_revision=(
+            backend.resolved_model_revision
+        ),
+        seed=args.seed,
     )
 
     pad_token_id = backend.tokenizer.pad_token_id
@@ -191,6 +225,8 @@ def main() -> None:
     )
 
     result = {
+        "schema_version": 1,
+        "provenance": provenance.to_dict(),
         "condition": {
             "device": str(backend.device),
             "dtype": str(backend.dtype),
@@ -227,6 +263,18 @@ def main() -> None:
     print("Device:", backend.device)
     print("Dtype:", backend.dtype)
     print("Use cache:", args.use_cache)
+    print(
+        "Requested model revision:",
+        backend.model_revision,
+    )
+    print(
+        "Resolved model revision:",
+        backend.resolved_model_revision,
+    )
+    print(
+        "Git dirty:",
+        provenance.git_dirty,
+    )
     print("Prompt tokens:", len(prompt_token_ids))
     print("Generated tokens:", len(generated_token_ids))
     print("Rollout latency ms:", rollout.latency_ms)

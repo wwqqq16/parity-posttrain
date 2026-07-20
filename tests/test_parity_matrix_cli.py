@@ -113,12 +113,32 @@ def test_main_runs_and_writes_summary(
         / "controlled_cpu_no_cache.json"
     )
 
+    fake_provenance = {
+        "seed": 17,
+        "requested_model_revision": (
+            "revision-test"
+        ),
+        "resolved_model_revision": (
+            "resolved-revision-test"
+        ),
+    }
+
     cached_path.write_text(
-        json.dumps({"condition": "cached"}),
+        json.dumps(
+            {
+                "condition": "cached",
+                "provenance": fake_provenance,
+            }
+        ),
         encoding="utf-8",
     )
     uncached_path.write_text(
-        json.dumps({"condition": "uncached"}),
+        json.dumps(
+            {
+                "condition": "uncached",
+                "provenance": fake_provenance,
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -293,6 +313,12 @@ def test_main_runs_and_writes_summary(
         ]
         == "revision-test"
     )
+    assert (
+        payload["matrix"][
+            "resolved_model_revision"
+        ]
+        == "resolved-revision-test"
+    )
     assert payload["matrix"]["include_mps"] is False
     assert payload["matrix"]["condition_count"] == 2
 
@@ -319,9 +345,84 @@ def test_main_runs_and_writes_summary(
     assert runner_kwargs["include_mps"] is False
 
     assert calls["payloads"] == [
-        {"condition": "cached"},
-        {"condition": "uncached"},
+        {
+            "condition": "cached",
+            "provenance": fake_provenance,
+        },
+        {
+            "condition": "uncached",
+            "provenance": fake_provenance,
+        },
     ]
+
+
+def test_validate_matrix_provenance_rejects_different_runs(
+) -> None:
+    module = load_script_module()
+
+    with pytest.raises(
+        ValueError,
+        match="identical provenance",
+    ):
+        module.validate_matrix_provenance(
+            [
+                {
+                    "provenance": {
+                        "seed": 17,
+                        "requested_model_revision": (
+                            "revision-test"
+                        ),
+                        "resolved_model_revision": (
+                            "resolved-a"
+                        ),
+                    }
+                },
+                {
+                    "provenance": {
+                        "seed": 17,
+                        "requested_model_revision": (
+                            "revision-test"
+                        ),
+                        "resolved_model_revision": (
+                            "resolved-b"
+                        ),
+                    }
+                },
+            ],
+            seed=17,
+            requested_model_revision=(
+                "revision-test"
+            ),
+        )
+
+
+def test_validate_matrix_provenance_rejects_seed_mismatch(
+) -> None:
+    module = load_script_module()
+
+    with pytest.raises(
+        ValueError,
+        match="seed does not match",
+    ):
+        module.validate_matrix_provenance(
+            [
+                {
+                    "provenance": {
+                        "seed": 0,
+                        "requested_model_revision": (
+                            "revision-test"
+                        ),
+                        "resolved_model_revision": (
+                            "resolved-revision-test"
+                        ),
+                    }
+                }
+            ],
+            seed=17,
+            requested_model_revision=(
+                "revision-test"
+            ),
+        )
 
 
 def test_load_payload_rejects_non_object(

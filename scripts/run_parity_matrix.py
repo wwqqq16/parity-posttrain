@@ -123,6 +123,104 @@ def load_controlled_payload(
     return cast(dict[str, Any], payload)
 
 
+def validate_matrix_provenance(
+    payloads: Sequence[dict[str, Any]],
+    *,
+    seed: int,
+    requested_model_revision: str | None,
+) -> dict[str, Any]:
+    """Validate shared provenance across matrix runs."""
+
+    if not payloads:
+        raise ValueError(
+            "at least one condition artifact is required"
+        )
+
+    reference_value = payloads[0].get(
+        "provenance"
+    )
+
+    if not isinstance(reference_value, dict):
+        raise ValueError(
+            "condition artifact 0 must contain "
+            "a provenance object"
+        )
+
+    reference = cast(
+        dict[str, Any],
+        reference_value,
+    )
+
+    required_fields = (
+        "seed",
+        "requested_model_revision",
+        "resolved_model_revision",
+    )
+
+    for field in required_fields:
+        if field not in reference:
+            raise ValueError(
+                "condition provenance is missing "
+                f"required field: {field}"
+            )
+
+    for index, payload in enumerate(
+        payloads[1:],
+        start=1,
+    ):
+        provenance_value = payload.get(
+            "provenance"
+        )
+
+        if not isinstance(
+            provenance_value,
+            dict,
+        ):
+            raise ValueError(
+                f"condition artifact {index} must "
+                "contain a provenance object"
+            )
+
+        if provenance_value != reference:
+            raise ValueError(
+                "all condition artifacts must use "
+                "identical provenance"
+            )
+
+    if reference["seed"] != seed:
+        raise ValueError(
+            "condition provenance seed does not "
+            "match matrix seed"
+        )
+
+    if (
+        reference["requested_model_revision"]
+        != requested_model_revision
+    ):
+        raise ValueError(
+            "condition requested model revision "
+            "does not match matrix request"
+        )
+
+    resolved_model_revision = reference[
+        "resolved_model_revision"
+    ]
+
+    if (
+        resolved_model_revision is not None
+        and not isinstance(
+            resolved_model_revision,
+            str,
+        )
+    ):
+        raise ValueError(
+            "resolved_model_revision must be "
+            "a string or null"
+        )
+
+    return reference
+
+
 def main(
     argv: Sequence[str] | None = None,
 ) -> int:
@@ -145,6 +243,19 @@ def main(
         load_controlled_payload(run.output_path)
         for run in runs
     ]
+
+    matrix_provenance = validate_matrix_provenance(
+        condition_payloads,
+        seed=args.seed,
+        requested_model_revision=(
+            args.model_revision
+        ),
+    )
+    resolved_model_revision = (
+        matrix_provenance[
+            "resolved_model_revision"
+        ]
+    )
 
     summary = build_controlled_parity_summary(
         condition_payloads
@@ -199,6 +310,9 @@ def main(
         "seed": args.seed,
         "requested_model_revision": (
             args.model_revision
+        ),
+        "resolved_model_revision": (
+            resolved_model_revision
         ),
         "include_mps": args.include_mps,
         "condition_count": len(runs),

@@ -421,6 +421,35 @@ def main(
         )
 
     print()
+    print("Matrix status:")
+    print("Overall passed:", overall_passed)
+    print("Regression passed:", regression_passed)
+    print(
+        "Known mismatches:",
+        declared_known_mismatch_slugs,
+    )
+    print(
+        "Known failures:",
+        known_failed_condition_slugs,
+    )
+    print(
+        "Resolved known mismatches:",
+        resolved_known_mismatch_slugs,
+    )
+    print(
+        "Unexpected failures:",
+        unexpected_failed_condition_slugs,
+    )
+    print("Seed:", args.seed)
+    print(
+        "Requested model revision:",
+        args.model_revision,
+    )
+    print(
+        "Resolved model revision:",
+        resolved_model_revision,
+    )
+    print()
     print("Output:", args.output)
 
     return 0 if regression_passed else 1

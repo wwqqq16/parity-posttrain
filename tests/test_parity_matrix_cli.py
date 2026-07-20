@@ -105,6 +105,7 @@ def load_script_module() -> ModuleType:
 def test_main_runs_and_writes_summary(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
     uncached_passed: bool,
     known_mismatches: list[str],
     expected_overall: bool,
@@ -301,6 +302,28 @@ def test_main_runs_and_writes_summary(
 
     payload = json.loads(
         output.read_text(encoding="utf-8")
+    )
+    captured = capsys.readouterr()
+
+    assert "Matrix status:" in captured.out
+    assert (
+        f"Overall passed: {expected_overall}"
+        in captured.out
+    )
+    assert (
+        "Regression passed: "
+        f"{expected_regression}"
+        in captured.out
+    )
+    assert (
+        "Unexpected failures: "
+        f"{expected_unexpected_failed_slugs}"
+        in captured.out
+    )
+    assert (
+        "Resolved model revision: "
+        "resolved-revision-test"
+        in captured.out
     )
 
     assert exit_code == expected_exit_code

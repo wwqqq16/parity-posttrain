@@ -36,3 +36,6 @@ logs/
 *.log
 .env
 artifacts/**/*.json
+
+# Generated enterprise post-training exports
+artifacts/enterprise_posttrain/

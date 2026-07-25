@@ -56,6 +56,13 @@ PROMPT_PROFILES = (
     CHECKLIST_PROMPT_PROFILE,
 )
 
+NO_GUARD_PROFILE = "none"
+PREREQUISITE_GUARD_PROFILE = "prerequisite"
+GUARD_PROFILES = (
+    NO_GUARD_PROFILE,
+    PREREQUISITE_GUARD_PROFILE,
+)
+
 
 def build_enterprise_system_prompt(
     *,
@@ -230,6 +237,7 @@ class ModelBackedRefundAgent:
         max_steps: int = 6,
         max_new_tokens: int = 96,
         prompt_profile: str = BASELINE_PROMPT_PROFILE,
+        guard_profile: str = NO_GUARD_PROFILE,
     ) -> None:
         if max_steps <= 0:
             raise ValueError("max_steps must be positive")
@@ -240,10 +248,16 @@ class ModelBackedRefundAgent:
                 f"unknown prompt profile {prompt_profile!r}; "
                 f"expected one of: {', '.join(PROMPT_PROFILES)}"
             )
+        if guard_profile not in GUARD_PROFILES:
+            raise ValueError(
+                f"unknown guard profile {guard_profile!r}; "
+                f"expected one of: {', '.join(GUARD_PROFILES)}"
+            )
         self.backend = backend
         self.max_steps = max_steps
         self.max_new_tokens = max_new_tokens
         self.prompt_profile = prompt_profile
+        self.guard_profile = guard_profile
 
     def run(self, env: RefundEnvironment) -> None:
         initial_observation = env.reset(
@@ -254,8 +268,10 @@ class ModelBackedRefundAgent:
         env.run.architecture = "model"
         env.run.metadata["model_backed"] = True
         env.run.metadata["prompt_profile"] = self.prompt_profile
+        env.run.metadata["guard_profile"] = self.guard_profile
         env.run.metadata["model_generations"] = []
         env.run.metadata["protocol_errors"] = []
+        env.run.metadata["runtime_guard_rejections"] = []
 
         messages = [
             {
@@ -283,20 +299,20 @@ class ModelBackedRefundAgent:
 
             generation_records = env.run.metadata["model_generations"]
             assert isinstance(generation_records, list)
-            generation_records.append(
-                generation_to_record(
-                    generation,
-                    turn_index=turn_index,
-                    parsed_action=parsed_action,
-                    parse_error=parse_error,
-                )
+            generation_record = generation_to_record(
+                generation,
+                turn_index=turn_index,
+                parsed_action=parsed_action,
+                parse_error=parse_error,
             )
+            generation_records.append(generation_record)
 
             messages.append(
                 {"role": "assistant", "content": generation.generated_text}
             )
 
             if parse_error is not None:
+                generation_record["dispatch_status"] = "not_dispatched"
                 protocol_errors = env.run.metadata["protocol_errors"]
                 assert isinstance(protocol_errors, list)
                 protocol_errors.append(
@@ -309,6 +325,40 @@ class ModelBackedRefundAgent:
                 return
 
             assert parsed_action is not None
+            guard_result = self._inspect_guard(env, parsed_action.action)
+            if guard_result is not None:
+                generation_record["dispatch_status"] = "blocked_by_guard"
+                generation_record["guard_result"] = {
+                    "success": guard_result.success,
+                    "observation": guard_result.observation,
+                    "metadata": guard_result.metadata,
+                }
+                env.run.add_step(parsed_action.action, guard_result)
+                guard_rejections = env.run.metadata[
+                    "runtime_guard_rejections"
+                ]
+                assert isinstance(guard_rejections, list)
+                guard_rejections.append(
+                    {
+                        "turn_index": turn_index,
+                        "action": parsed_action.action.action_type.value,
+                        "arguments": parsed_action.action.arguments,
+                        "observation": guard_result.observation,
+                        "metadata": guard_result.metadata,
+                    }
+                )
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": format_environment_feedback(
+                            action=parsed_action.action,
+                            result=guard_result,
+                        ),
+                    }
+                )
+                continue
+
+            generation_record["dispatch_status"] = "dispatched"
             result = env.step(parsed_action.action)
             if parsed_action.action.action_type is ActionType.RESPOND:
                 return
@@ -324,6 +374,15 @@ class ModelBackedRefundAgent:
             )
 
         self._safe_stop(env, reason="model exceeded the maximum action budget")
+
+    def _inspect_guard(
+        self,
+        env: RefundEnvironment,
+        action: AgentAction,
+    ) -> ToolResult | None:
+        if self.guard_profile == NO_GUARD_PROFILE:
+            return None
+        return env.inspect_execution_guard(action)
 
     @staticmethod
     def _safe_stop(env: RefundEnvironment, *, reason: str) -> None:

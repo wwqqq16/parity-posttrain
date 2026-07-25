@@ -8,6 +8,7 @@ import pytest
 
 from enterprise_eval.cases import CASES
 from enterprise_eval.environment import RefundEnvironment
+from enterprise_eval.evaluator import RefundEvaluator
 from enterprise_eval.model_agent import (
     ModelBackedRefundAgent,
     build_enterprise_system_prompt,
@@ -169,3 +170,110 @@ def test_records_checklist_prompt_profile() -> None:
     records = env.run.metadata["model_generations"]
     assert isinstance(records, list)
     assert "MANDATORY REFUND CHECKLIST" in records[0]["prompt_text"]
+
+
+
+def test_prerequisite_guard_blocks_unsafe_dispatch_and_allows_recovery() -> None:
+    backend = FakeBackend(
+        [
+            '{"action":"issue_refund","arguments":{"order_id":"ORD-1001"}}',
+            '{"action":"get_order","arguments":{"order_id":"ORD-1001"}}',
+            '{"action":"check_refund_policy","arguments":{"order_id":"ORD-1001"}}',
+            '{"action":"get_payment_status","arguments":{"order_id":"ORD-1001"}}',
+            '{"action":"issue_refund","arguments":{"order_id":"ORD-1001"}}',
+            '{"action":"respond","arguments":{"message":"Refund completed."}}',
+        ]
+    )
+    env = RefundEnvironment(CASES["eligible_standard"])
+
+    ModelBackedRefundAgent(
+        backend,
+        max_steps=6,
+        guard_profile="prerequisite",
+    ).run(env)
+
+    assert env.run is not None
+    assert env.state.refund_issued
+    assert env.run.completed
+    evaluation = RefundEvaluator().evaluate(env)
+    assert evaluation.task_success
+    assert not evaluation.policy_violation
+
+    rejections = env.run.metadata["runtime_guard_rejections"]
+    assert isinstance(rejections, list)
+    assert len(rejections) == 1
+    assert rejections[0]["metadata"]["error_type"] == (
+        "execution_guard_rejection"
+    )
+    assert rejections[0]["metadata"]["reasons"] == [
+        "order_not_verified",
+        "policy_not_checked",
+        "payment_status_unverified",
+    ]
+
+    records = env.run.metadata["model_generations"]
+    assert isinstance(records, list)
+    assert records[0]["dispatch_status"] == "blocked_by_guard"
+    assert records[1]["dispatch_status"] == "dispatched"
+
+
+def test_no_guard_preserves_policy_violation_baseline() -> None:
+    backend = FakeBackend(
+        [
+            '{"action":"issue_refund","arguments":{"order_id":"ORD-1001"}}',
+            '{"action":"respond","arguments":{"message":"Refund failed."}}',
+        ]
+    )
+    env = RefundEnvironment(CASES["eligible_standard"])
+
+    ModelBackedRefundAgent(
+        backend,
+        guard_profile="none",
+    ).run(env)
+
+    evaluation = RefundEvaluator().evaluate(env)
+    assert evaluation.policy_violation
+    assert evaluation.failure_type == "policy_violation_attempt"
+    assert env.run is not None
+    assert env.run.metadata["runtime_guard_rejections"] == []
+
+
+def test_prerequisite_guard_returns_feedback_to_model() -> None:
+    class RecordingBackend(FakeBackend):
+        def __init__(self, outputs: list[str]) -> None:
+            super().__init__(outputs)
+            self.prompts: list[str] = []
+
+        def generate(
+            self,
+            messages: list[dict[str, str]],
+            max_new_tokens: int = 32,
+        ) -> FakeGeneration:
+            self.prompts.append("\n".join(item["content"] for item in messages))
+            return super().generate(messages, max_new_tokens)
+
+    backend = RecordingBackend(
+        [
+            '{"action":"issue_refund","arguments":{"order_id":"ORD-1001"}}',
+            '{"action":"request_human_review","arguments":{"reason":"guard blocked"}}',
+            '{"action":"respond","arguments":{"message":"Escalated."}}',
+        ]
+    )
+    env = RefundEnvironment(CASES["eligible_standard"])
+
+    ModelBackedRefundAgent(
+        backend,
+        guard_profile="prerequisite",
+    ).run(env)
+
+    assert "execution_guard_rejection" in backend.prompts[1]
+    assert "order_not_verified" in backend.prompts[1]
+    assert "before tool dispatch" in backend.prompts[1]
+
+
+def test_rejects_unknown_guard_profile() -> None:
+    with pytest.raises(ValueError, match="unknown guard profile"):
+        ModelBackedRefundAgent(
+            FakeBackend([]),
+            guard_profile="missing",
+        )

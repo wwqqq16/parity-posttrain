@@ -18,6 +18,7 @@ from enterprise_eval.cases import CASES
 from enterprise_eval.environment import RefundEnvironment
 from enterprise_eval.evaluator import RefundEvaluator
 from enterprise_eval.model_agent import (
+    GUARD_PROFILES,
     PROMPT_PROFILES,
     ModelBackedRefundAgent,
 )
@@ -41,6 +42,12 @@ def parse_args() -> argparse.Namespace:
         help="System-prompt condition for controlled ablations.",
     )
     parser.add_argument(
+        "--guard-profile",
+        choices=GUARD_PROFILES,
+        default="none",
+        help="Pre-dispatch execution guard for sensitive actions.",
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         default=Path("artifacts/enterprise_model"),
@@ -57,6 +64,7 @@ def main() -> None:
         max_steps=args.max_steps,
         max_new_tokens=args.max_new_tokens,
         prompt_profile=args.prompt_profile,
+        guard_profile=args.guard_profile,
     )
     env = RefundEnvironment(CASES[args.case])
     agent.run(env)
@@ -70,12 +78,16 @@ def main() -> None:
     print(f"case:          {args.case}")
     print(f"model:         {args.model_name}")
     print(f"prompt profile: {args.prompt_profile}")
+    print(f"guard profile:  {args.guard_profile}")
     print(f"architecture:  {env.run.architecture}")
     print(f"component calls: {env.run.component_calls}")
     print(f"steps:         {len(env.run.steps)}")
     print(f"success:       {evaluation.task_success}")
     print(f"reward:        {evaluation.final_reward:.2f}")
     print(f"failure type:  {evaluation.failure_type or '-'}")
+    guard_rejections = env.run.metadata.get("runtime_guard_rejections", [])
+    guard_count = len(guard_rejections) if isinstance(guard_rejections, list) else 0
+    print(f"guard rejections: {guard_count}")
     print(f"artifact:      {artifact_path}")
 
     generations = env.run.metadata.get("model_generations", [])

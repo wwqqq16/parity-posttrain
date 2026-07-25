@@ -178,10 +178,8 @@ class RefundEnvironment:
             },
         )
 
-    def _issue_refund(self, arguments: dict[str, object]) -> ToolResult:
-        error = self._validate_order_id(arguments)
-        if error:
-            return error
+    def refund_block_reasons(self) -> list[str]:
+        """Return the current reasons that make refund execution unsafe."""
 
         reasons: list[str] = []
         if self.case.task_type is TaskType.CANCEL_REFUND:
@@ -200,7 +198,50 @@ class RefundEnvironment:
             reasons.append("payment_not_settled")
         if self.case.claim_conflicts_with_record:
             reasons.append("claim_conflicts_with_record")
+        return reasons
 
+    def inspect_execution_guard(self, action: AgentAction) -> ToolResult | None:
+        """Return a pre-dispatch rejection for an unsafe sensitive action."""
+
+        if action.action_type is not ActionType.ISSUE_REFUND:
+            return None
+
+        error = self._validate_order_id(action.arguments)
+        if error is not None:
+            return None
+
+        reasons = self.refund_block_reasons()
+        if not reasons:
+            return None
+
+        evidence_reasons = {
+            "order_not_verified",
+            "policy_not_checked",
+            "payment_status_unverified",
+        }
+        collectable = all(reason in evidence_reasons for reason in reasons)
+        return ToolResult(
+            success=False,
+            observation=(
+                "Execution guard blocked issue_refund before tool dispatch: "
+                + ", ".join(reasons)
+            ),
+            metadata={
+                "error_type": "execution_guard_rejection",
+                "blocked_action": ActionType.ISSUE_REFUND.value,
+                "reasons": reasons,
+                "recommended_action": (
+                    "collect_evidence" if collectable else "request_human_review"
+                ),
+            },
+        )
+
+    def _issue_refund(self, arguments: dict[str, object]) -> ToolResult:
+        error = self._validate_order_id(arguments)
+        if error:
+            return error
+
+        reasons = self.refund_block_reasons()
         if reasons:
             return ToolResult(
                 success=False,

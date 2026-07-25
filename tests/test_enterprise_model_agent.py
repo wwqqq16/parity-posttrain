@@ -10,6 +10,7 @@ from enterprise_eval.cases import CASES
 from enterprise_eval.environment import RefundEnvironment
 from enterprise_eval.model_agent import (
     ModelBackedRefundAgent,
+    build_enterprise_system_prompt,
     parse_model_action,
 )
 from enterprise_eval.models import ActionType
@@ -132,3 +133,39 @@ def test_action_budget_exhaustion_safely_escalates() -> None:
     assert env.run.completed
     assert env.state.human_review_requested
     assert env.run.component_calls == 1
+
+
+def test_checklist_prompt_requires_evidence_and_retry() -> None:
+    prompt = build_enterprise_system_prompt(profile="checklist")
+
+    assert "MANDATORY REFUND CHECKLIST" in prompt
+    assert "get_order" in prompt
+    assert "check_refund_policy" in prompt
+    assert "get_payment_status" in prompt
+    assert "retry that same tool once" in prompt
+    assert "Never call issue_refund directly" in prompt
+
+
+def test_rejects_unknown_prompt_profile() -> None:
+    with pytest.raises(ValueError, match="unknown prompt profile"):
+        build_enterprise_system_prompt(profile="missing")
+
+
+def test_records_checklist_prompt_profile() -> None:
+    backend = FakeBackend(
+        [
+            '{"action":"respond","arguments":{"message":"I cannot proceed safely."}}',
+        ]
+    )
+    env = RefundEnvironment(CASES["eligible_standard"])
+
+    ModelBackedRefundAgent(
+        backend,
+        prompt_profile="checklist",
+    ).run(env)
+
+    assert env.run is not None
+    assert env.run.metadata["prompt_profile"] == "checklist"
+    records = env.run.metadata["model_generations"]
+    assert isinstance(records, list)
+    assert "MANDATORY REFUND CHECKLIST" in records[0]["prompt_text"]

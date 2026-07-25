@@ -17,7 +17,10 @@ from enterprise_eval.artifacts import write_run_artifact
 from enterprise_eval.cases import CASES
 from enterprise_eval.environment import RefundEnvironment
 from enterprise_eval.evaluator import RefundEvaluator
-from enterprise_eval.model_agent import ModelBackedRefundAgent
+from enterprise_eval.model_agent import (
+    PROMPT_PROFILES,
+    ModelBackedRefundAgent,
+)
 from parity_posttrain.rollout.hf_backend import HuggingFaceRolloutBackend
 
 
@@ -31,6 +34,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", choices=("cpu", "mps", "cuda"))
     parser.add_argument("--max-steps", type=int, default=6)
     parser.add_argument("--max-new-tokens", type=int, default=96)
+    parser.add_argument(
+        "--prompt-profile",
+        choices=PROMPT_PROFILES,
+        default="baseline",
+        help="System-prompt condition for controlled ablations.",
+    )
     parser.add_argument(
         "--output-dir",
         type=Path,
@@ -47,6 +56,7 @@ def main() -> None:
         backend,
         max_steps=args.max_steps,
         max_new_tokens=args.max_new_tokens,
+        prompt_profile=args.prompt_profile,
     )
     env = RefundEnvironment(CASES[args.case])
     agent.run(env)
@@ -59,6 +69,7 @@ def main() -> None:
     print("=" * 44)
     print(f"case:          {args.case}")
     print(f"model:         {args.model_name}")
+    print(f"prompt profile: {args.prompt_profile}")
     print(f"architecture:  {env.run.architecture}")
     print(f"component calls: {env.run.component_calls}")
     print(f"steps:         {len(env.run.steps)}")

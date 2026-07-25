@@ -42,3 +42,6 @@ artifacts/enterprise_posttrain/
 
 # Generated model-backed enterprise runs
 artifacts/enterprise_model/
+
+# Generated enterprise model parity reports
+artifacts/enterprise_model_parity/

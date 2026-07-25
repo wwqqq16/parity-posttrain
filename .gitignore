@@ -39,3 +39,6 @@ artifacts/**/*.json
 
 # Generated enterprise post-training exports
 artifacts/enterprise_posttrain/
+
+# Generated model-backed enterprise runs
+artifacts/enterprise_model/

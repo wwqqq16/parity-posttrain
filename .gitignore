@@ -57,3 +57,6 @@ artifacts/vendor_payment_privacy/
 
 # Generated vendor-payment coordination artifacts
 artifacts/vendor_payment_coordination/
+
+# Generated event-transport artifacts
+artifacts/event_transport/

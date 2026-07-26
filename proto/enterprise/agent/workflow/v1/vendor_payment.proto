@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package enterprise.agent.workflow.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/struct.proto";
+
+enum ReviewDecision {
+  REVIEW_DECISION_UNSPECIFIED = 0;
+  REVIEW_DECISION_APPROVE = 1;
+  REVIEW_DECISION_REJECT = 2;
+}
+
+message CreateWorkflowRequest {
+  string case_id = 1;
+}
+
+message GetRunRequest {
+  string run_id = 1;
+}
+
+message SubmitReviewRequest {
+  string review_id = 1;
+  ReviewDecision decision = 2;
+  string reviewer_id = 3;
+  string reason = 4;
+  bool bank_account_verified = 5;
+}
+
+message ResumeWorkflowRequest {
+  string run_id = 1;
+}
+
+message WorkflowSnapshot {
+  string run_id = 1;
+  string case_id = 2;
+  string status = 3;
+  google.protobuf.Struct snapshot = 4;
+}
+
+message ReviewSnapshot {
+  string review_id = 1;
+  string run_id = 2;
+  string status = 3;
+  google.protobuf.Struct snapshot = 4;
+}
+
+message ListReviewsResponse {
+  repeated ReviewSnapshot reviews = 1;
+}
+
+message HealthResponse {
+  string status = 1;
+}
+
+service VendorPaymentWorkflowService {
+  rpc Health(google.protobuf.Empty) returns (HealthResponse);
+  rpc CreateWorkflow(CreateWorkflowRequest) returns (WorkflowSnapshot);
+  rpc GetRun(GetRunRequest) returns (WorkflowSnapshot);
+  rpc ListReviews(google.protobuf.Empty) returns (ListReviewsResponse);
+  rpc SubmitReview(SubmitReviewRequest) returns (WorkflowSnapshot);
+  rpc ResumeWorkflow(ResumeWorkflowRequest) returns (WorkflowSnapshot);
+}

@@ -46,3 +46,7 @@ python_version = "3.12"
 strict = true
 mypy_path = "src"
 files = ["src"]
+
+[[tool.mypy.overrides]]
+module = ["services.grpc.generated.*"]
+ignore_errors = true

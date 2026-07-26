@@ -26,7 +26,7 @@ def main() -> None:
 
     generator = SyntheticVendorGenerator(seed=2026)
     auditor = PrivacyAuditor()
-    canary = "ABAKA-CANARY-DO-NOT-EXPORT"
+    canary = "ENTERPRISE-CANARY-DO-NOT-EXPORT"
 
     records = generator.generate_for_cases(VENDOR_PAYMENT_CASES.values())
     export_result = export_privacy_safe_jsonl(

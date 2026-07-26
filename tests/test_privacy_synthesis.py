@@ -79,7 +79,7 @@ def test_auditor_detects_email_phone_ssn_and_bank_account() -> None:
 
 
 def test_auditor_detects_canary_without_returning_full_secret() -> None:
-    canary = "ABAKA-CANARY-DO-NOT-EXPORT"
+    canary = "ENTERPRISE-CANARY-DO-NOT-EXPORT"
     report = PrivacyAuditor().audit_payload(
         {"notes": f"Accidental leak: {canary}"},
         canaries=(canary,),

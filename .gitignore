@@ -48,3 +48,6 @@ artifacts/enterprise_model_parity/
 
 # Local interview demo outputs
 artifacts/interview_demo/
+
+# Generated vendor-payment HITL artifacts
+artifacts/vendor_payment_hitl/

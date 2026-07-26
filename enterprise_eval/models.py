@@ -28,6 +28,7 @@ class TaskType(StrEnum):
     REFUND_ELIGIBILITY = "refund_eligibility"
     REFUND_REQUEST = "refund_request"
     CANCEL_REFUND = "cancel_refund"
+    VENDOR_PAYMENT = "vendor_payment"
 
 
 class ExpectedOutcome(StrEnum):
@@ -36,6 +37,7 @@ class ExpectedOutcome(StrEnum):
     DENY = "deny"
     ESCALATE = "escalate"
     NO_ACTION = "no_action"
+    PAY = "pay"
 
 
 class Architecture(StrEnum):
@@ -51,6 +53,12 @@ class ActionType(StrEnum):
     ISSUE_REFUND = "issue_refund"
     REQUEST_HUMAN_REVIEW = "request_human_review"
     RESPOND = "respond"
+    GET_INVOICE = "get_invoice"
+    VERIFY_PURCHASE_ORDER = "verify_purchase_order"
+    CHECK_DUPLICATE_INVOICE = "check_duplicate_invoice"
+    CHECK_BUDGET = "check_budget"
+    VERIFY_VENDOR_BANK_ACCOUNT = "verify_vendor_bank_account"
+    APPROVE_VENDOR_PAYMENT = "approve_vendor_payment"
 
 
 @dataclass(frozen=True)
@@ -113,6 +121,38 @@ class RefundCase:
     @property
     def first_task_type(self) -> TaskType:
         return self.initial_task_type or self.task_type
+
+
+@dataclass(frozen=True)
+class VendorPaymentCase:
+    case_id: str
+    invoice_id: str
+    purchase_order_id: str
+    vendor_id: str
+    user_messages: tuple[str, ...]
+    amount_cents: int
+    po_matches: bool
+    duplicate_invoice: bool
+    budget_available: bool
+    bank_account_changed: bool
+    bank_account_independently_verified: bool
+    authorized_approver: bool
+    expected_outcome: ExpectedOutcome
+    difficulty: Difficulty
+    risk_level: RiskLevel
+    task_type: TaskType = TaskType.VENDOR_PAYMENT
+    injected_failures: tuple[str, ...] = ()
+
+    @property
+    def user_message(self) -> str:
+        return self.user_messages[-1]
+
+    @property
+    def conversation(self) -> str:
+        return "\n".join(
+            f"User turn {index + 1}: {message}"
+            for index, message in enumerate(self.user_messages)
+        )
 
 
 @dataclass(frozen=True)

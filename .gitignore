@@ -54,3 +54,6 @@ artifacts/vendor_payment_hitl/
 
 # Generated vendor-payment privacy artifacts
 artifacts/vendor_payment_privacy/
+
+# Generated vendor-payment coordination artifacts
+artifacts/vendor_payment_coordination/

@@ -45,3 +45,6 @@ artifacts/enterprise_model/
 
 # Generated enterprise model parity reports
 artifacts/enterprise_model_parity/
+
+# Local interview demo outputs
+artifacts/interview_demo/

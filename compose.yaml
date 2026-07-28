@@ -1,0 +1,99 @@
+name: parity-posttrain
+
+services:
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v26.1.14
+    command:
+      - redpanda
+      - start
+      - --mode
+      - dev-container
+      - --smp
+      - "1"
+      - --memory
+      - 512M
+      - --reserve-memory
+      - 0M
+      - --kafka-addr
+      - internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr
+      - internal://redpanda:9092,external://localhost:19092
+    ports:
+      - "19092:19092"
+    healthcheck:
+      test:
+        - CMD
+        - rpk
+        - cluster
+        - info
+        - -X
+        - brokers=localhost:9092
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  redpanda-init:
+    image: docker.redpanda.com/redpandadata/redpanda:v26.1.14
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -c
+    command:
+      - >-
+        rpk topic create enterprise-control-plane-events
+        -X brokers=redpanda:9092 || true
+    restart: "no"
+
+  control-plane-api:
+    build:
+      context: .
+    command:
+      - python
+      - -m
+      - uvicorn
+      - enterprise_eval.distributed.kafka_api:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+    ports:
+      - "8000:8000"
+    depends_on:
+      redpanda-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen(
+          "http://127.0.0.1:8000/healthz",
+          timeout=2).read()
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  rollout-grpc:
+    build:
+      context: .
+    command:
+      - python
+      - -m
+      - enterprise_eval.distributed.grpc_service
+      - --host
+      - 0.0.0.0
+      - --port
+      - "50051"
+      - --kafka-bootstrap-servers
+      - redpanda:9092
+    ports:
+      - "50051:50051"
+    depends_on:
+      redpanda-init:
+        condition: service_completed_successfully

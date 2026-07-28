@@ -20,7 +20,13 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.10"
 ]
-
+distributed = [
+    "fastapi[standard-no-fastapi-cloud-cli]>=0.115,<1",
+    "grpcio>=1.70,<2",
+    "grpcio-tools>=1.70,<2",
+    "aiokafka>=0.12,<1",
+    "httpx>=0.28,<1",
+]
 ml = [
     "torch>=2.6,<3",
     "transformers>=4.51,<6",
@@ -37,6 +43,9 @@ addopts = "-q"
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+extend-exclude = [
+    "enterprise_eval/distributed/proto/control_plane_pb2*",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

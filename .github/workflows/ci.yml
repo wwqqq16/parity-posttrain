@@ -34,7 +34,7 @@ jobs:
         run: python -m pip install --upgrade pip
 
       - name: Install dependencies
-        run: python -m pip install -e ".[dev,ml]"
+        run: python -m pip install -e ".[dev,ml,distributed]"
 
       - name: Run tests
         run: python -m pytest

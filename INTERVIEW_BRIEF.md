@@ -10,6 +10,7 @@ I built a reproducible enterprise-agent evaluation and post-training pipeline th
 flowchart LR
     A[Synthetic enterprise cases] --> B[Stateful refund environment]
     A --> O[RL control plane]
+    X[FastAPI and gRPC] --> O
     O --> B
     B --> C1[Scripted single agent]
     B --> C2[Planner–critic agent]
@@ -25,6 +26,7 @@ flowchart LR
     D --> E[Deterministic evaluator]
     E --> F[Task success / policy violation / failure step]
     O --> P[Dense rewards / snapshots / state fingerprints]
+    O --> Q[Kafka events / metrics / replay]
 
     D --> H[SFT export]
     D --> I[Preference-pair export]
@@ -56,6 +58,8 @@ flowchart LR
 - Prompt ablation and a runtime prerequisite guard for irreversible actions.
 - Position-aware fault injection with explicit exposure and recovery metrics.
 - An online reset/step adapter with dense rewards, deterministic fingerprints, and snapshot/restore.
+- FastAPI and bidirectional-streaming gRPC adapters backed by one episode service.
+- Request-id idempotency, ordered Kafka-compatible events, and Docker Compose deployment.
 
 ## Main experimental results
 
@@ -120,6 +124,19 @@ required evidence items, `0.25` for the correct irreversible action, and
 was blocked before dispatch, received `-0.50`, and did not mutate refund
 state.
 
+### 6. Distributed control plane
+
+I separated the deterministic environment core from its transport and
+event infrastructure. FastAPI handles episode lifecycle and inspection;
+gRPC provides typed unary and bidirectional-streaming rollout methods;
+and Redpanda carries versioned, episode-keyed audit events.
+
+The containerized proof produced the same terminal fingerprint through
+REST and gRPC, blocked a duplicate refund retry through request
+idempotency, consumed 12 ordered events without a sequence gap, replayed
+those events to the original fingerprint, and observed the runtime-guard
+rejection on the event bus.
+
 ## 90-second interview pitch
 
 I started from a post-training infrastructure project focused on rollout–trainer log-probability parity, then extended it into a controlled enterprise-agent evaluation lab.
@@ -135,7 +152,11 @@ Finally, I converted model turns into validated training examples and compared s
 I also exposed the same environment through an online reset/step
 control plane with dense reward components and deterministic state
 fingerprints, so the evaluation contract can be used directly by a
-training loop without losing replayability.
+training loop without losing replayability. I then separated the core
+from deployment concerns: FastAPI manages episode lifecycle, gRPC
+supports typed and streaming rollouts, and Kafka-compatible events
+provide ordered audit and replay. Cross-transport fingerprints,
+idempotency, event ordering, replay, and guard propagation are tested.
 
 ## Five-minute walkthrough
 
@@ -165,9 +186,24 @@ This distinguishes safety from competence: the system remained safe even when th
 
 Each real generation becomes a `TrajectoryTrainingExample`. I then compute three probability comparisons to isolate where mismatches occur. CPU FP32 was highly consistent. MPS FP16 showed a small number of large outliers on the first turn and broader drift on the longer second turn.
 
-### 7. Limitations and next step
+### 7. Distributed deployment boundary
+
+FastAPI and gRPC both reuse the same `EpisodeService`. A caller-supplied
+request ID prevents a retried irreversible action from executing twice.
+Every state transition emits a versioned Kafka-compatible event with an
+episode key, sequence number, and state fingerprint. The Docker demo
+verifies REST/gRPC parity and reconstructs the terminal state from the
+event log.
+
+### 8. Limitations and next step
 
 The scripted architecture comparison is controlled and deterministic; it is not a claim that planner–critic is always better. The real-model study uses a small local model and a limited set of runs. The next step would be a larger-model and multi-seed comparison, followed by training on successful trajectories and preference pairs while preserving the runtime guard as an independent execution-safety layer.
+
+The distributed layer is also intentionally production-shaped rather
+than production-ready: episode state and idempotency are in memory,
+Kafka publication is not protected by a transactional outbox, and the
+local deployment has no authentication, TLS, tenant isolation, or
+horizontal state sharing.
 
 ## Likely follow-up questions
 
@@ -230,6 +266,22 @@ Narration:
 3. The unsafe probe demonstrates that model intent, execution safety,
    and task success remain separate.
 
+### Ninety-second distributed control-plane demo
+
+```bash
+docker compose up --build -d
+python scripts/run_distributed_control_plane_demo.py
+```
+
+Narration:
+
+1. REST and gRPC independently execute the same episode and end at the
+   same deterministic fingerprint.
+2. Repeating the refund request with the same request ID returns a cached
+   transition instead of dispatching the irreversible action twice.
+3. Redpanda carries 12 ordered events; replay reaches the same terminal
+   fingerprint, and the guard rejection is visible on the event bus.
+
 ```bash
 python scripts/run_enterprise_benchmark.py \
   --architecture both \
@@ -266,6 +318,10 @@ python scripts/run_enterprise_model_parity.py \
 - Do not present 105 generated tasks as 105 independent semantic templates;
   they are five grounded variants across 21 controlled coverage cells.
 - Do not claim the scripted failure surface proves learned-model behavior.
-- Do not call the in-process adapter a deployed remote RL environment service.
+- Describe the remote layer as a locally deployable, production-shaped
+  control-plane prototype, not a production-ready platform.
 - Do not claim the hand-designed dense rewards are already validated as
   policy-invariant for learned agents.
+- Do not imply durable exactly-once state mutation: idempotency is
+  process-local and Kafka publication does not yet use a transactional
+  outbox.

@@ -4,8 +4,10 @@
 
 The control plane converts the deterministic refund workflow into an
 online RL environment without duplicating business or evaluation rules.
-It is an in-process research adapter, not a claim of a production remote
-environment service.
+The core adapter remains in-process. A separate distributed layer now
+exposes the same contract through FastAPI and gRPC and publishes
+Kafka-compatible events. Neither layer is a claim of production
+readiness.
 
 ## Contract
 
@@ -111,18 +113,29 @@ This keeps three outcomes separate:
 2. execution can remain safe because dispatch is blocked;
 3. task completion can still fail if the model cannot recover.
 
-## Production path
+## Distributed adapter and production path
 
-The current control plane deliberately remains in-process. A production
-extension would preserve this contract while adding:
+The repository now includes:
 
-- FastAPI or gRPC reset/step endpoints;
-- database-backed state and event sourcing;
+- FastAPI reset/step lifecycle endpoints;
+- unary and bidirectional-streaming gRPC rollout methods;
+- request-id idempotency and per-episode concurrency locks;
+- versioned, episode-keyed Kafka-compatible events;
+- deterministic event replay;
+- Docker Compose services for FastAPI, gRPC, and Redpanda.
+
+See [DISTRIBUTED_CONTROL_PLANE.md](DISTRIBUTED_CONTROL_PLANE.md) for the
+verified contracts and demo.
+
+Further production work would preserve the same environment contract
+while adding:
+
+- database-backed state, idempotency, and event sourcing;
+- a transactional outbox for atomic state-and-event commits;
 - MCP-compatible tool interfaces;
-- isolated, horizontally scalable environment containers;
+- authenticated tenants, TLS, quotas, and privacy-aware retention;
+- episode-affinity routing or durable horizontally scalable workers;
 - virtual time and asynchronous event ordering;
-- authenticated tenants and privacy-aware audit retention;
 - calibrated human and soft-rubric evaluation.
 
-Those are deployment extensions, not evidence currently provided by this
-repository.
+Those are not evidence currently provided by this repository.

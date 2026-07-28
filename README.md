@@ -76,6 +76,7 @@ The current implementation supports:
 17. Closed-outcome validation with an independent two-attempt solvability oracle.
 18. Failure-surface aggregation across difficulty, failure type, and trajectory position.
 19. A Gym-style online RL control plane with dense rewards and deterministic replay.
+20. FastAPI and gRPC transports with Kafka-compatible audit events and containerized replay.
 
 ## Enterprise RL Environment and Failure Surface
 
@@ -162,6 +163,58 @@ receives `-0.50`, and leaves `refund_issued=False`.
 
 The detailed contract and production boundaries are documented in
 [RL_CONTROL_PLANE.md](RL_CONTROL_PLANE.md).
+
+## Distributed Control Plane
+
+The deterministic environment core is also exposed through real remote
+interfaces without duplicating business rules:
+
+~~~mermaid
+flowchart LR
+    T[Trainer or evaluator] -->|REST lifecycle and debugging| A[FastAPI control plane]
+    T -->|gRPC reset, step, and streaming| G[gRPC rollout worker]
+    A --> S[Shared EpisodeService]
+    G --> S
+    S --> E[Enterprise RL environment]
+    S -->|Versioned events keyed by episode| K[Redpanda or Kafka]
+    K --> M[Metrics consumer]
+    K --> R[Deterministic event replay]
+~~~
+
+`EpisodeService` owns episode state, per-episode concurrency locks, and
+request idempotency. Retrying the same `request_id` with the same action
+returns the cached transition; reusing it for a different action returns
+HTTP `409` or gRPC `ALREADY_EXISTS`. This prevents a transport retry from
+dispatching an irreversible refund twice.
+
+Every episode publishes ordered, versioned events such as
+`episode.started`, `action.requested`, `tool.failed`, `guard.rejected`,
+`reward.assigned`, and `episode.completed`. The episode ID is the Kafka
+message key, and every event includes an explicit sequence number and
+state fingerprint.
+
+Run the complete containerized stack and proof:
+
+~~~bash
+docker compose up --build -d
+python scripts/run_distributed_control_plane_demo.py
+~~~
+
+The observed result is:
+
+~~~text
+REST final fingerprint:   cc445b8608da8196
+gRPC final fingerprint:   cc445b8608da8196
+Transport parity:         PASS
+Duplicate refund blocked: PASS
+Kafka events observed:    12
+Event sequence gaps:      0
+Replay parity:            PASS
+Guard rejection emitted: PASS
+~~~
+
+The full architecture, contracts, and limitations are documented in
+[DISTRIBUTED_CONTROL_PLANE.md](DISTRIBUTED_CONTROL_PLANE.md).
 
 ## Policy-Objective Normalization
 
@@ -494,7 +547,7 @@ python -m ruff check .
 python -m mypy
 ~~~
 
-The current test suite contains 278 tests.
+The current test suite contains 294 tests.
 
 ## Generated Artifacts
 
@@ -528,7 +581,12 @@ The current project demonstrates:
 - position-aware failure injection and exposure tracking;
 - multi-axis failure-surface reports;
 - online reset/step rewards with terminated and truncated signals;
-- deterministic state fingerprints and snapshot/restore replay.
+- deterministic state fingerprints and snapshot/restore replay;
+- FastAPI lifecycle and step endpoints with explicit error semantics;
+- unary and bidirectional-streaming gRPC rollout methods;
+- idempotent request handling for irreversible actions;
+- Kafka-compatible ordered audit events and event-log replay;
+- a Docker Compose stack for FastAPI, gRPC, and Redpanda.
 
 It is not yet:
 
@@ -536,8 +594,10 @@ It is not yet:
 - a complete PPO or GRPO implementation;
 - a vLLM-integrated production trainer;
 - a multi-node rollout-training architecture;
-- a database- and API-backed full-stack enterprise simulation;
-- a horizontally scaled container or remote environment service;
+- a database-backed durable episode-state service;
+- a transactional outbox providing atomic state-and-event commits;
+- an authenticated, TLS-secured, multi-tenant deployment;
+- an autoscaled or multi-node environment service;
 - a calibrated soft-rubric or human-annotation evaluation pipeline;
 - evidence that the scripted failure surface transfers unchanged to larger models.
 

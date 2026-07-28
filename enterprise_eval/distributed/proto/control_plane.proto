@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package parity_posttrain.control_plane.v1;
+
+import "google/protobuf/struct.proto";
+
+service RolloutService {
+  rpc Reset(ResetRequest) returns (ResetResponse);
+  rpc Step(StepRequest) returns (StepResponse);
+  rpc RunEpisode(stream StepRequest) returns (stream StepResponse);
+}
+
+message ResetRequest {
+  string case_id = 1;
+  string architecture = 2;
+  string episode_id = 3;
+}
+
+message ResetResponse {
+  string episode_id = 1;
+  string case_id = 2;
+  string architecture = 3;
+  string observation = 4;
+  string state_fingerprint = 5;
+  google.protobuf.Struct info = 6;
+}
+
+message StepRequest {
+  string episode_id = 1;
+  string request_id = 2;
+  string action_type = 3;
+  google.protobuf.Struct arguments = 4;
+}
+
+message StepResponse {
+  string episode_id = 1;
+  string request_id = 2;
+  string action_type = 3;
+  string observation = 4;
+  double reward = 5;
+  bool terminated = 6;
+  bool truncated = 7;
+  string state_fingerprint = 8;
+  google.protobuf.Struct info = 9;
+}

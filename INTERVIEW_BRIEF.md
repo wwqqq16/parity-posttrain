@@ -9,6 +9,8 @@ I built a reproducible enterprise-agent evaluation and post-training pipeline th
 ```mermaid
 flowchart LR
     A[Synthetic enterprise cases] --> B[Stateful refund environment]
+    A --> O[RL control plane]
+    O --> B
     B --> C1[Scripted single agent]
     B --> C2[Planner–critic agent]
     B --> C3[Real Hugging Face agent]
@@ -22,6 +24,7 @@ flowchart LR
 
     D --> E[Deterministic evaluator]
     E --> F[Task success / policy violation / failure step]
+    O --> P[Dense rewards / snapshots / state fingerprints]
 
     D --> H[SFT export]
     D --> I[Preference-pair export]
@@ -52,6 +55,7 @@ flowchart LR
   - stored rollout vs forced rollout.
 - Prompt ablation and a runtime prerequisite guard for irreversible actions.
 - Position-aware fault injection with explicit exposure and recovery metrics.
+- An online reset/step adapter with dense rewards, deterministic fingerprints, and snapshot/restore.
 
 ## Main experimental results
 
@@ -103,6 +107,19 @@ the single baseline only escalated through its explicit payment retry
 path. Exposure tracking also showed when a late scheduled failure was
 never reached because the agent had already used an obsolete identifier.
 
+### 5. Online RL control plane
+
+The environment now returns observation, dense reward, terminated,
+truncated, state fingerprint, and decomposed reward components at every
+step. Replaying the same five-action episode twice produced identical
+fingerprints and a total return of 1.55.
+
+The reward trace was `0.10`, `0.10`, and `0.10` for collecting the three
+required evidence items, `0.25` for the correct irreversible action, and
+`1.00` for the terminal hard-evaluator outcome. An unsafe refund probe
+was blocked before dispatch, received `-0.50`, and did not mutate refund
+state.
+
 ## 90-second interview pitch
 
 I started from a post-training infrastructure project focused on rollout–trainer log-probability parity, then extended it into a controlled enterprise-agent evaluation lab.
@@ -114,6 +131,11 @@ I first validated the environment with scripted single-agent and planner–criti
 I then connected a real Hugging Face model and recorded genuine prompt tokens, generated tokens, and per-token rollout log-probabilities. The model produced valid JSON but immediately attempted an irreversible refund without collecting evidence. A stronger checklist prompt did not fix the behavior. I therefore added a deterministic runtime guard that blocked all eight unsafe attempts before tool dispatch. This eliminated policy violations, although the model still failed to recover and was safely escalated.
 
 Finally, I converted model turns into validated training examples and compared stored rollout, forced-sequence rollout, and trainer-side rescoring. CPU FP32 matched within tolerance, while MPS FP16 showed execution-path and longer-context discrepancies. The main lesson is that model behavior, execution safety, and numerical training consistency need separate evaluation layers.
+
+I also exposed the same environment through an online reset/step
+control plane with dense reward components and deterministic state
+fingerprints, so the evaluation contract can be used directly by a
+training loop without losing replayability.
 
 ## Five-minute walkthrough
 
@@ -194,6 +216,20 @@ Narration:
 3. The table localizes a concrete recovery gap: both agents retry payment,
    but not order or policy reads.
 
+### Ninety-second RL control-plane demo
+
+```bash
+python scripts/run_rl_control_plane_demo.py
+```
+
+Narration:
+
+1. Every step returns an auditable reward decomposition and deterministic
+   state fingerprint.
+2. The same episode is run twice and every fingerprint matches.
+3. The unsafe probe demonstrates that model intent, execution safety,
+   and task success remain separate.
+
 ```bash
 python scripts/run_enterprise_benchmark.py \
   --architecture both \
@@ -230,3 +266,6 @@ python scripts/run_enterprise_model_parity.py \
 - Do not present 105 generated tasks as 105 independent semantic templates;
   they are five grounded variants across 21 controlled coverage cells.
 - Do not claim the scripted failure surface proves learned-model behavior.
+- Do not call the in-process adapter a deployed remote RL environment service.
+- Do not claim the hand-designed dense rewards are already validated as
+  policy-invariant for learned agents.

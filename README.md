@@ -75,6 +75,7 @@ The current implementation supports:
 16. A parameterized enterprise task factory with controlled failure injection.
 17. Closed-outcome validation with an independent two-attempt solvability oracle.
 18. Failure-surface aggregation across difficulty, failure type, and trajectory position.
+19. A Gym-style online RL control plane with dense rewards and deterministic replay.
 
 ## Enterprise RL Environment and Failure Surface
 
@@ -117,6 +118,50 @@ attribution to an injection that never occurred.
 
 The complete methodology and 42-cell result table are in
 [FAILURE_SURFACE_RESULTS.md](FAILURE_SURFACE_RESULTS.md).
+
+## Online RL Control Plane
+
+`EnterpriseRefundRLEnvironment` turns the same business environment and
+hard evaluator into an online training contract:
+
+~~~text
+reset() -> observation, state_fingerprint, info
+
+step(action) -> observation, reward, terminated, truncated,
+                state_fingerprint, info
+~~~
+
+Every transition returns decomposed reward components rather than an
+opaque scalar. Evidence collection uses potential-difference shaping, so
+repeating an already completed check produces no additional progress
+credit. Recovery, correct irreversible actions, safe escalation, guard
+rejection, invalid actions, truncation, and final outcome remain separate
+components in `info`.
+
+The adapter also supports:
+
+- deterministic state fingerprints that exclude random run IDs;
+- snapshot and restore with configuration and integrity checks;
+- explicit step-budget truncation;
+- optional pre-dispatch guarding of irreversible actions;
+- replay artifacts containing every reward component and state hash.
+
+The stable demo replays the same successful episode twice:
+
+| Step | Action | Reward |
+|---:|---|---:|
+| 0 | `get_order` | 0.10 |
+| 1 | `check_refund_policy` | 0.10 |
+| 2 | `get_payment_status` | 0.10 |
+| 3 | `issue_refund` | 0.25 |
+| 4 | `respond` | 1.00 |
+
+Both runs produce identical transition fingerprints and a return of
+`1.55`. A separate unsafe refund probe is blocked before dispatch,
+receives `-0.50`, and leaves `refund_issued=False`.
+
+The detailed contract and production boundaries are documented in
+[RL_CONTROL_PLANE.md](RL_CONTROL_PLANE.md).
 
 ## Policy-Objective Normalization
 
@@ -271,6 +316,7 @@ scripts/
 ├── run_controlled_parity.py
 ├── run_failure_surface.py
 ├── run_hf_parity.py
+├── run_rl_control_plane_demo.py
 ├── run_token_clipping_diagnostics.py
 ├── run_training_comparison.py
 └── summarize_controlled_parity.py
@@ -280,6 +326,7 @@ enterprise_eval/
 ├── evaluator.py        # Hard-rule outcomes, recovery, and failure attribution
 ├── task_factory.py     # Balanced generated cases and solvability validation
 ├── failure_surface.py  # Multi-axis aggregation and Markdown reporting
+├── rl_environment.py   # Online rewards, replay, snapshots, and fingerprints
 └── scripted_agent.py   # Single, planner-critic, and oracle policies
 ~~~
 
@@ -387,6 +434,15 @@ The three points to show are:
 3. the observed recovery gap is position-dependent, revealing exactly
    which read operations need retry or escalation logic.
 
+The online environment contract has a shorter deterministic demo:
+
+~~~bash
+python scripts/run_rl_control_plane_demo.py
+~~~
+
+It demonstrates dense rewards, identical replay fingerprints, and a
+guarded unsafe-action probe without downloading a model.
+
 ## Reproducible Parity Result
 
 A controlled replay of `basket_001`, turn 0, compares rollout
@@ -438,7 +494,7 @@ python -m ruff check .
 python -m mypy
 ~~~
 
-The current test suite contains 271 tests.
+The current test suite contains 278 tests.
 
 ## Generated Artifacts
 
@@ -470,7 +526,9 @@ The current project demonstrates:
 - balanced parameterized enterprise task generation;
 - closed-outcome and oracle solvability validation;
 - position-aware failure injection and exposure tracking;
-- multi-axis failure-surface reports.
+- multi-axis failure-surface reports;
+- online reset/step rewards with terminated and truncated signals;
+- deterministic state fingerprints and snapshot/restore replay.
 
 It is not yet:
 
@@ -479,6 +537,7 @@ It is not yet:
 - a vLLM-integrated production trainer;
 - a multi-node rollout-training architecture;
 - a database- and API-backed full-stack enterprise simulation;
+- a horizontally scaled container or remote environment service;
 - a calibrated soft-rubric or human-annotation evaluation pipeline;
 - evidence that the scripted failure surface transfers unchanged to larger models.
 

@@ -41,7 +41,14 @@ class ExpectedOutcome(StrEnum):
 class Architecture(StrEnum):
     SINGLE = "single"
     PLANNER_CRITIC = "planner-critic"
+    ORACLE = "oracle"
     UNSAFE = "unsafe"
+
+
+class FailureProfile(StrEnum):
+    NONE = "none"
+    TRANSIENT_TOOL_TIMEOUT = "transient_tool_timeout"
+    PERSISTENT_TOOL_TIMEOUT = "persistent_tool_timeout"
 
 
 class ActionType(StrEnum):
@@ -76,6 +83,12 @@ class RefundCase:
     corrected_order_id: str | None = None
     initial_task_type: TaskType | None = None
     injected_failures: tuple[str, ...] = ()
+    failure_profile: FailureProfile = FailureProfile.NONE
+    failure_injection_step: int | None = None
+    failure_injection_action: ActionType | None = None
+    failure_injection_count: int = 0
+    factory_seed: int | None = None
+    factory_variant: int | None = None
 
     @property
     def user_message(self) -> str:

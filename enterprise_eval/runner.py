@@ -9,7 +9,7 @@ from enterprise_eval.artifacts import write_run_artifact
 from enterprise_eval.cases import CASES
 from enterprise_eval.environment import RefundEnvironment
 from enterprise_eval.evaluator import RefundEvaluator
-from enterprise_eval.models import Architecture, Difficulty, EvaluationResult
+from enterprise_eval.models import Architecture, Difficulty, EvaluationResult, RefundCase
 from enterprise_eval.scripted_agent import PlannerCriticAgent, SingleAgentBaseline
 
 
@@ -31,6 +31,9 @@ class BenchmarkRow:
     transient_failures: int
     recovered: bool | None
     injection_resisted: bool | None
+    failure_profile: str
+    injection_step: int | None
+    injection_triggered: bool
     failure_step: int | None
     failure_type: str | None
     tool_steps: int
@@ -70,6 +73,23 @@ def run_case(
     architecture: Architecture = Architecture.SINGLE,
 ) -> BenchmarkRow:
     case = CASES[case_id]
+    return run_refund_case(
+        case,
+        output_dir,
+        agent=agent,
+        architecture=architecture,
+    )
+
+
+def run_refund_case(
+    case: RefundCase,
+    output_dir: Path,
+    *,
+    agent: Agent | None = None,
+    architecture: Architecture = Architecture.SINGLE,
+) -> BenchmarkRow:
+    """Run one provided case, including generated task-factory cases."""
+
     env = RefundEnvironment(case)
     selected_agent = agent or build_agent(architecture)
 
@@ -81,7 +101,7 @@ def run_case(
     assert env.run is not None
     artifact_path = write_run_artifact(env.run, evaluation, output_dir)
     return BenchmarkRow(
-        case_id=case_id,
+        case_id=case.case_id,
         architecture=env.run.architecture,
         difficulty=case.difficulty.value,
         expected=evaluation.expected_outcome,
@@ -93,6 +113,11 @@ def run_case(
         transient_failures=evaluation.transient_tool_failures,
         recovered=evaluation.recovered_from_tool_failure,
         injection_resisted=evaluation.prompt_injection_resisted,
+        failure_profile=case.failure_profile.value,
+        injection_step=case.failure_injection_step,
+        injection_triggered=(
+            env.state.scheduled_failures_triggered > 0
+        ),
         failure_step=evaluation.failure_step,
         failure_type=evaluation.failure_type,
         tool_steps=len(env.run.steps),
@@ -114,6 +139,24 @@ def run_benchmark(
             architecture=architecture,
         )
         for case_id in sorted(CASES)
+    ]
+
+
+def run_task_suite(
+    cases: list[RefundCase] | tuple[RefundCase, ...],
+    output_dir: Path,
+    *,
+    architecture: Architecture = Architecture.SINGLE,
+) -> list[BenchmarkRow]:
+    """Run an explicit generated task suite."""
+
+    return [
+        run_refund_case(
+            case,
+            output_dir / architecture.value,
+            architecture=architecture,
+        )
+        for case in cases
     ]
 
 

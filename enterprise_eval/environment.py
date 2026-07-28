@@ -24,6 +24,7 @@ class EnvironmentState:
     policy_checked: bool = False
     payment_status_verified: bool = False
     payment_status_calls: int = 0
+    scheduled_failures_triggered: int = 0
 
 
 class RefundEnvironment:
@@ -56,6 +57,17 @@ class RefundEnvironment:
                 "risk_level": self.case.risk_level.value,
                 "task_type": self.case.task_type.value,
                 "injected_failures": list(self.case.injected_failures),
+                "failure_profile": self.case.failure_profile.value,
+                "failure_injection_step": self.case.failure_injection_step,
+                "failure_injection_action": (
+                    self.case.failure_injection_action.value
+                    if self.case.failure_injection_action is not None
+                    else None
+                ),
+                "failure_injection_count": self.case.failure_injection_count,
+                "scheduled_failures_triggered": 0,
+                "factory_seed": self.case.factory_seed,
+                "factory_variant": self.case.factory_variant,
             },
         )
         return initial_observation
@@ -72,6 +84,11 @@ class RefundEnvironment:
             self.run.add_step(action, result)
             return result
 
+        scheduled_failure = self._scheduled_failure(action)
+        if scheduled_failure is not None:
+            self.run.add_step(action, scheduled_failure)
+            return scheduled_failure
+
         handlers = {
             ActionType.GET_ORDER: self._get_order,
             ActionType.CHECK_REFUND_POLICY: self._check_refund_policy,
@@ -84,6 +101,47 @@ class RefundEnvironment:
         result = handler(action.arguments)
         self.run.add_step(action, result)
         return result
+
+    def _scheduled_failure(
+        self,
+        action: AgentAction,
+    ) -> ToolResult | None:
+        injection_step = self.case.failure_injection_step
+        injection_action = self.case.failure_injection_action
+        injection_count = self.case.failure_injection_count
+        assert self.run is not None
+
+        if (
+            injection_step is None
+            or injection_action is None
+            or injection_count <= 0
+            or action.action_type is not injection_action
+        ):
+            return None
+
+        current_step = len(self.run.steps)
+        injection_stop = injection_step + injection_count
+        if not injection_step <= current_step < injection_stop:
+            return None
+
+        self.state.scheduled_failures_triggered += 1
+        self.run.metadata["scheduled_failures_triggered"] = (
+            self.state.scheduled_failures_triggered
+        )
+        return ToolResult(
+            success=False,
+            observation=(
+                "The task factory injected a retryable tool timeout "
+                f"at trajectory step {current_step}."
+            ),
+            metadata={
+                "error_type": "transient_tool_failure",
+                "retryable": True,
+                "failure_profile": self.case.failure_profile.value,
+                "injection_step": injection_step,
+                "injection_attempt": self.state.scheduled_failures_triggered,
+            },
+        )
 
     def _validate_order_id(self, arguments: dict[str, object]) -> ToolResult | None:
         order_id = arguments.get("order_id")

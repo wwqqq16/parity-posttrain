@@ -72,6 +72,51 @@ The current implementation supports:
 13. A real single-step optimizer update.
 14. Token-, sequence-, and trajectory-normalized policy updates.
 15. Reproducible JSON experiment artifacts.
+16. A parameterized enterprise task factory with controlled failure injection.
+17. Closed-outcome validation with an independent two-attempt solvability oracle.
+18. Failure-surface aggregation across difficulty, failure type, and trajectory position.
+
+## Enterprise RL Environment and Failure Surface
+
+The enterprise evaluation lab models a stateful refund workflow with
+deterministic business tools, irreversible-action guards, structured
+trajectory artifacts, and hard-rule evaluation.
+
+The task factory expands the 14 curated regression cases into a balanced
+controlled suite:
+
+- 105 generated tasks from seed 17;
+- easy, medium, and hard conversation structures;
+- no failure, one-shot timeout, and retry-budget-exhausting timeout profiles;
+- injection at `get_order`, `check_refund_policy`, or `get_payment_status`;
+- 21 coverage cells with five data variants per cell;
+- 100% completion by an independent solvability oracle.
+
+~~~mermaid
+flowchart LR
+    A[Task factory] --> B[Coverage and contract validator]
+    B --> C[Solvability oracle]
+    B --> D[Stateful refund environment]
+    D --> E1[Single-agent baseline]
+    D --> E2[Planner-critic baseline]
+    E1 --> F[Structured trajectories]
+    E2 --> F
+    F --> G[Hard-rule evaluator]
+    G --> H[Failure surface]
+    H --> I[Difficulty x failure type x injection step]
+~~~
+
+The controlled run contains 210 evaluated trajectories across the two
+scripted architectures. Both agents recover a one-shot payment timeout,
+but neither retries a one-shot timeout during order or policy lookup.
+The planner-critic safely escalates after persistent failures at all
+three positions; the single baseline only does so on its existing payment
+retry path. The hard corrected-identifier tasks also expose whether a
+scheduled late failure was actually reached, avoiding misleading
+attribution to an injection that never occurred.
+
+The complete methodology and 42-cell result table are in
+[FAILURE_SURFACE_RESULTS.md](FAILURE_SURFACE_RESULTS.md).
 
 ## Policy-Objective Normalization
 
@@ -224,10 +269,18 @@ scripts/
 ├── run_agent_closed_loop.py
 ├── run_agent_parity.py
 ├── run_controlled_parity.py
+├── run_failure_surface.py
 ├── run_hf_parity.py
 ├── run_token_clipping_diagnostics.py
 ├── run_training_comparison.py
 └── summarize_controlled_parity.py
+
+enterprise_eval/
+├── environment.py      # Stateful workflow and controlled fault injection
+├── evaluator.py        # Hard-rule outcomes, recovery, and failure attribution
+├── task_factory.py     # Balanced generated cases and solvability validation
+├── failure_surface.py  # Multi-axis aggregation and Markdown reporting
+└── scripted_agent.py   # Single, planner-critic, and oracle policies
 ~~~
 
 ## Token-Level PPO Clipping Diagnostics
@@ -311,6 +364,29 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[dev,ml]"
 ~~~
 
+## Three-Minute Enterprise Demo
+
+The stable interview demo uses deterministic scripted agents, so it does
+not require a model download:
+
+~~~bash
+python scripts/run_failure_surface.py \
+  --seed 17 \
+  --variants-per-cell 5 \
+  --architecture both
+~~~
+
+The command first validates task coverage and oracle solvability, then
+runs 210 controlled trajectories and prints the full failure surface.
+The three points to show are:
+
+1. task difficulty and fault position are explicit inputs rather than
+   post-hoc labels;
+2. `Exposed` distinguishes a real injected failure from a scheduled
+   failure that the agent never reached;
+3. the observed recovery gap is position-dependent, revealing exactly
+   which read operations need retry or escalation logic.
+
 ## Reproducible Parity Result
 
 A controlled replay of `basket_001`, turn 0, compares rollout
@@ -362,7 +438,7 @@ python -m ruff check .
 python -m mypy
 ~~~
 
-The current test suite contains 222 tests.
+The current test suite contains 271 tests.
 
 ## Generated Artifacts
 
@@ -390,14 +466,21 @@ The current project demonstrates:
 - persistent closed-loop rerollouts after training;
 - token-level PPO clipping diagnostics;
 - reusable pre-update training observers;
-- reproducible normalization comparisons.
+- reproducible normalization comparisons;
+- balanced parameterized enterprise task generation;
+- closed-outcome and oracle solvability validation;
+- position-aware failure injection and exposure tracking;
+- multi-axis failure-surface reports.
 
 It is not yet:
 
 - a distributed RL training system;
 - a complete PPO or GRPO implementation;
 - a vLLM-integrated production trainer;
-- a multi-node rollout-training architecture.
+- a multi-node rollout-training architecture;
+- a database- and API-backed full-stack enterprise simulation;
+- a calibrated soft-rubric or human-annotation evaluation pipeline;
+- evidence that the scripted failure surface transfers unchanged to larger models.
 
 These extensions can be added without changing the core parity
 abstractions.

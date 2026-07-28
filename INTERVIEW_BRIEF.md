@@ -37,6 +37,8 @@ flowchart LR
 ## What I built
 
 - 14 deterministic enterprise refund cases across easy, medium, and hard difficulty.
+- 105 generated failure-surface tasks across 21 balanced coverage cells.
+- Closed-outcome validation with 100% solvability-oracle completion.
 - Stateful tools for order lookup, policy checks, payment-state verification, refunds, and human review.
 - Single-agent and planner–critic scripted baselines.
 - Failure attribution for policy violations, invalid calls, stale evidence, timeouts, and unnecessary escalation.
@@ -49,6 +51,7 @@ flowchart LR
   - forced-sequence rollout vs trainer rescore;
   - stored rollout vs forced rollout.
 - Prompt ablation and a runtime prerequisite guard for irreversible actions.
+- Position-aware fault injection with explicit exposure and recovery metrics.
 
 ## Main experimental results
 
@@ -85,6 +88,20 @@ Tolerance: `1e-3`
 | Turn 1, MPS FP16, cache | 2.88e-3 | 2.13e-2 | 33 | Fail |
 
 The Turn 0 MPS outlier was concentrated on the first generated token. The largest error also appeared between stored free-generation and forced-sequence rollout, suggesting that the execution path contributed more than trainer rescoring alone. On Turn 1, forced rollout also diverged from trainer rescoring, so the longer-context discrepancy could not be attributed solely to free generation.
+
+### 4. Parameterized failure surface
+
+The task factory generated 105 controlled tasks from seed 17, with five
+variants in every difficulty × failure-profile × injection-position
+cell. An independent two-attempt oracle completed all tasks under their
+declared refund-or-escalate contracts.
+
+Both scripted baselines recovered a one-shot payment timeout. Neither
+retried a one-shot timeout during order or policy lookup. Planner-critic
+escalated safely after retry-budget exhaustion at every position, while
+the single baseline only escalated through its explicit payment retry
+path. Exposure tracking also showed when a late scheduled failure was
+never reached because the agent had already used an obsolete identifier.
 
 ## 90-second interview pitch
 
@@ -158,6 +175,25 @@ The results show that reduced precision, cache behavior, execution path, and seq
 
 ## Stable demo commands
 
+### Three-minute failure-surface demo
+
+```bash
+python scripts/run_failure_surface.py \
+  --seed 17 \
+  --variants-per-cell 5 \
+  --architecture both
+```
+
+Narration:
+
+1. The factory treats difficulty, fault profile, and injection position
+   as controlled inputs and validates all 105 tasks with an independent
+   oracle.
+2. The `Exposed` column distinguishes an injected fault from a fault the
+   agent never reached, which prevents false causal attribution.
+3. The table localizes a concrete recovery gap: both agents retry payment,
+   but not order or policy reads.
+
 ```bash
 python scripts/run_enterprise_benchmark.py \
   --architecture both \
@@ -191,3 +227,6 @@ python scripts/run_enterprise_model_parity.py \
 - Do not claim the MPS discrepancy is definitively caused by KV cache or FP16 alone.
 - Do not present semantic scripted trajectories as genuine token-level training data.
 - Emphasize that real token-level examples come only from the model-backed runs.
+- Do not present 105 generated tasks as 105 independent semantic templates;
+  they are five grounded variants across 21 controlled coverage cells.
+- Do not claim the scripted failure surface proves learned-model behavior.

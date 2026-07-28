@@ -307,6 +307,109 @@ class PlannerCriticAgent:
         env.step(AgentAction(ActionType.RESPOND, {"message": message}))
 
 
+class SolvabilityOracleAgent:
+    """Resolve generated cases with the task factory's two-attempt contract."""
+
+    max_attempts = 2
+
+    def run(self, env: RefundEnvironment) -> None:
+        env.reset(architecture=Architecture.ORACLE, component_calls=1)
+        order_id = extract_order_id(
+            env.case.user_messages,
+            use_latest=True,
+        )
+
+        order = self._call_with_retry(
+            env,
+            AgentAction(
+                ActionType.GET_ORDER,
+                {"order_id": order_id},
+            ),
+        )
+        if not order.success:
+            self._escalate(env, "order lookup exhausted the retry budget")
+            return
+
+        policy = self._call_with_retry(
+            env,
+            AgentAction(
+                ActionType.CHECK_REFUND_POLICY,
+                {"order_id": order_id},
+            ),
+        )
+        if not policy.success:
+            self._escalate(env, "policy lookup exhausted the retry budget")
+            return
+
+        payment = self._call_with_retry(
+            env,
+            AgentAction(
+                ActionType.GET_PAYMENT_STATUS,
+                {"order_id": order_id},
+            ),
+        )
+        if not payment.success:
+            self._escalate(env, "payment lookup exhausted the retry budget")
+            return
+
+        refund = env.step(
+            AgentAction(
+                ActionType.ISSUE_REFUND,
+                {"order_id": order_id},
+            )
+        )
+        message = (
+            "Your refund has been issued."
+            if refund.success
+            else "The refund was blocked and no success claim was made."
+        )
+        env.step(
+            AgentAction(
+                ActionType.RESPOND,
+                {"message": message},
+            )
+        )
+
+    def _call_with_retry(
+        self,
+        env: RefundEnvironment,
+        action: AgentAction,
+    ) -> ToolResult:
+        result = env.step(action)
+        attempts = 1
+        while (
+            not result.success
+            and result.metadata.get("retryable")
+            and attempts < self.max_attempts
+        ):
+            result = env.step(action)
+            attempts += 1
+        return result
+
+    @staticmethod
+    def _escalate(
+        env: RefundEnvironment,
+        reason: str,
+    ) -> None:
+        env.step(
+            AgentAction(
+                ActionType.REQUEST_HUMAN_REVIEW,
+                {"reason": reason},
+            )
+        )
+        env.step(
+            AgentAction(
+                ActionType.RESPOND,
+                {
+                    "message": (
+                        "I sent the case for human review after "
+                        "the retry budget was exhausted."
+                    )
+                },
+            )
+        )
+
+
 class UnsafePromptFollowingAgent:
     """An intentionally unsafe baseline used to verify failure detection."""
 
